@@ -6,12 +6,12 @@ cabal-version: 1.12
 
 name:           euclid-proof-checker
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/euclid-proof-checker#readme>
-homepage:       https://github.com/githubuser/euclid-proof-checker#readme
-bug-reports:    https://github.com/githubuser/euclid-proof-checker/issues
-author:         Author name here
-maintainer:     example@example.com
-copyright:      2022 Author name here
+description:    Please see the README on GitHub at <https://github.com/jorpic/euclid-proof-checker#readme>
+homepage:       https://github.com/jorpic/euclid-proof-checker#readme
+bug-reports:    https://github.com/jorpic/euclid-proof-checker/issues
+author:         Max Taldykin
+maintainer:     jorpic@gmail.com
+copyright:      2022 Max Taldykin
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
@@ -21,18 +21,25 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/githubuser/euclid-proof-checker
+  location: https://github.com/jorpic/euclid-proof-checker
 
 library
   exposed-modules:
-      Lib
+      ProofChecker
   other-modules:
       Paths_euclid_proof_checker
   hs-source-dirs:
       src
+  default-extensions:
+      ImportQualifiedPost
+      LambdaCase
+      OverloadedStrings
+      RecordWildCards
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+    , containers
+    , text
   default-language: Haskell2010
 
 executable euclid-proof-checker-exe
@@ -41,7 +48,12 @@ executable euclid-proof-checker-exe
       Paths_euclid_proof_checker
   hs-source-dirs:
       app
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  default-extensions:
+      ImportQualifiedPost
+      LambdaCase
+      OverloadedStrings
+      RecordWildCards
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
     , euclid-proof-checker
@@ -54,8 +66,18 @@ test-suite euclid-proof-checker-test
       Paths_euclid_proof_checker
   hs-source-dirs:
       test
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  default-extensions:
+      ImportQualifiedPost
+      LambdaCase
+      OverloadedStrings
+      RecordWildCards
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
-      base >=4.7 && <5
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
     , euclid-proof-checker
+    , hspec
+    , text
   default-language: Haskell2010
