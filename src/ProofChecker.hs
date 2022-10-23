@@ -1,14 +1,14 @@
 module ProofChecker
     ( unify
+    , unify'
     , parseExpr
     ) where
 
 import Prelude hiding (Ordering(..))
-import Control.Monad (guard)
+import Control.Monad (foldM)
 import Data.List.Split (splitOn)
-import Data.Ord (comparing)
 import Data.Map (Map)
-import Data.Text (Text)
+import Data.Map qualified as Map
 
 data Fn
   = BE |      EQ | NE | CO | NC
@@ -74,10 +74,7 @@ arity = \case
 
 
 data Expr
-  = Expr
-    { functor :: Fn
-    , args :: [Expr]
-    }
+  = Expr Fn [Expr]
   | Atom Char
   deriving (Show, Eq)
 
@@ -108,6 +105,35 @@ parseExpr txt
       _ -> pure $ map Atom xs
     pure $ Expr fn' xs'
 
+e2m :: Either a b -> Maybe b
+e2m = either (const Nothing) Just
 
-unify :: Expr -> [Expr] -> Maybe (Map Char Char)
-unify p qs = Nothing
+unify' :: Expr -> [Expr] -> Maybe (Map Char Char)
+unify' _ [] = Nothing
+unify' p [q] = e2m $ unify p q
+unify' p qs  = e2m $ unify p $ Expr AN qs
+
+type UniMap = Map Char Char
+
+unify :: Expr -> Expr -> Either String UniMap
+unify p q
+  = withContext ("unify:" <> show p <> " ~ " show q)
+  $ case (p,q) of
+    (Atom x, Atom y)
+      -> pure $ Map.singleton y x
+    (Expr f fx, Expr g gx) -> do
+      guardE (f == g) "functors do not match"
+      guardE (length fx == length gx) "functor arities do not match"
+      uniMaps <- sequence (zipWith unify fx gx)
+      foldM mergeMaps Map.empty uniMaps
+    _ -> Left "cant' match functor with atom"
+
+mergeMaps :: UniMap -> UniMap -> Either String UniMap
+mergeMaps mx = go mx . Map.toList
+  where
+    go mx' [] = Right mx'
+    go mx' ((ky, vy):ys) = case Map.lookup ky mx' of
+      Just vx
+        | vx == vy  -> go mx' ys
+        | otherwise -> Left $ "conflict: " <> show (ky, [vx, vy])
+      Nothing -> go (Map.insert ky vy mx') ys

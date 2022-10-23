@@ -9,7 +9,7 @@ import Data.ByteString.Lazy.Char8 qualified as B (lines, readFile)
 import GHC.Generics
 import Test.Hspec
 
-import ProofChecker (parseExpr, unify)
+import ProofChecker (parseExpr, unify')
 
 data UnificationExample = UnificationExample
   { p :: Text
@@ -19,6 +19,7 @@ data UnificationExample = UnificationExample
 
 instance Aeson.FromJSON UnificationExample
 
+-- FIXME: add hand-made unification tests
 
 main :: IO ()
 main = do
@@ -38,7 +39,7 @@ unificationSpec (UnificationExample{..})
     let res' = do
           p' <- parseExpr $ T.unpack p
           q' <- sequence $ map (parseExpr . T.unpack) q
-          pure $ unify p' q'
+          pure $ unify' p' q'
     case res' of
       Left err -> expectationFailure err
       Right atomMapping -> atomMapping `shouldBe` res
