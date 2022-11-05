@@ -44,6 +44,7 @@ library:
   - containers
   - text
   - split
+  - megaparsec
 
 executables:
   euclid-proof-checker-exe:
@@ -51,6 +52,7 @@ executables:
     source-dirs:         app
     dependencies:
     - euclid-proof-checker
+    - text
 
 tests:
   euclid-proof-checker-test:
