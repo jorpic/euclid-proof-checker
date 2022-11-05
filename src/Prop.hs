@@ -16,7 +16,7 @@ import Expr qualified as E
 
 
 data Prop = Prop
-  { from :: Expr
+  { from :: [Expr]
   , ex   :: [Char]
   , to   :: Expr
   }
@@ -35,7 +35,7 @@ mapLeft :: (a -> b) -> Either a x -> Either b x
 mapLeft f = either (Left . f) Right
 
 prop'List :: Parser [Prop']
-prop'List = prop' `sepBy1` eol <* eof
+prop'List = prop' `endBy1` eol <* skipManyTill space eof
 
 prop' :: Parser Prop'
 prop' = do
@@ -47,11 +47,11 @@ prop' = do
     , "lemma"
     ]
   void tab
-  pName <- takeWhile1P (Just "name") Char.isAlphaNum
+  pName <- takeWhile1P (Just "name") (/= '\t')
   void tab
   pProp <- lex "`" *> prop <* lex "`" <?> "proposition"
   void tab
-  pFile <- takeWhileP (Just "proof file") Char.isAlphaNum
+  pFile <- takeWhileP (Just "proof file") (Char.isPrint)
 
   return
     ( pType <> ":" <> pName
@@ -108,10 +108,21 @@ exVars = lex "?" *> some atom <* lex "." <?> "existential"
 
 prop :: Parser Prop
 prop = do
-  from <- expr <* lex "==>"
-  ex <- fromMaybe [] <$> optional exVars
-  to <- expr
-  pure $ Prop {..}
+  ex1 <- expr
+  res <- optional $ do
+    void $ lex "==>"
+    (,)
+      <$> (fromMaybe [] <$> optional exVars)
+      <*> expr
+  pure $ case res of
+    -- ex1 is a consequent without context
+    Nothing -> Prop [] [] ex1
+    -- ex1 is an antecedent and we unfold it to form context
+    Just (vars, ex2) -> Prop (unfoldAnd ex1) vars ex2
+      where
+        unfoldAnd = \case
+          E.Expr E.AN xs -> xs
+          x -> [x]
 
 lex :: Parser a -> Parser a
 lex p = p <* skipMany (hidden " ")
