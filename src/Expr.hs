@@ -4,7 +4,8 @@ import Control.Category ((>>>))
 import Prelude hiding (Ordering(..))
 
 data Fn
-  = BE | BR | EQ | NE | CO | NC
+  = BR | FR | TF
+  | BE |      EQ | NE | CO | NC
   | EE | TR | EA | ON | RA | IC
   | OC | CI | CU | SU | TC | LT
   | ME | CR | SS | OS | AO | EL
@@ -16,10 +17,13 @@ data Fn
 
 arity :: Fn -> Int
 arity = \case
-  BE -> 3 -- ABC are in order, that is, B is between A and C
-  -- vvv FIXME: This one was added by me,
-  --            as it is not possible to parse *.txt without it.
+  -- vvv FIXME: These three were added by me.
+  --            They are defined in Definitions.txt
   BR -> 5 -- base rectangle
+  FR -> 8 -- figurerectangle
+  TF -> 7 -- triangle ABC is equal to quadrilateral abcd
+  --
+  BE -> 3 -- ABC are in order, that is, B is between A and C
   -- vvv FIXME: This one clashes with "equal triangles".
   --            Judging by arity, it is not used in proofs.
   --  TE -> 3 -- non-strict betweenness
