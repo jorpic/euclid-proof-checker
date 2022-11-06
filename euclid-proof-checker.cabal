@@ -46,7 +46,7 @@ library
     , text
   default-language: Haskell2010
 
-executable euclid-proof-checker-exe
+executable euclid-proof-checker
   main-is: Main.hs
   other-modules:
       Paths_euclid_proof_checker
@@ -61,6 +61,7 @@ executable euclid-proof-checker-exe
   build-depends:
       base >=4.7 && <5
     , euclid-proof-checker
+    , filepath
     , text
   default-language: Haskell2010
 

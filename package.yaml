@@ -47,11 +47,12 @@ library:
   - megaparsec
 
 executables:
-  euclid-proof-checker-exe:
+  euclid-proof-checker:
     main:                Main.hs
     source-dirs:         app
     dependencies:
     - euclid-proof-checker
+    - filepath
     - text
 
 tests:

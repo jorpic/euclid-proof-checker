@@ -1,4 +1,11 @@
-module Prop where
+module Prop
+  ( Prop(..)
+  , PropKind(..)
+  , parseListOf
+  , def'
+  , prop'
+  )
+  where
 
 import Prelude hiding (lex)
 import Control.Monad (void)
@@ -15,8 +22,12 @@ import Expr (Expr)
 import Expr qualified as E
 
 
+data PropKind = Implication | Equivalence
+  deriving (Eq, Show)
+
 data Prop = Prop
-  { from :: [Expr]
+  { kind :: PropKind
+  , from :: [Expr]
   , ex   :: [Char]
   , to   :: Expr
   }
@@ -26,16 +37,15 @@ type Parser a = Parsec Void Text a
 type Err = ParseErrorBundle Text Void
 type Prop' = (Text, Prop, Maybe FilePath)
 
-parsePropList :: FilePath -> IO (Either String [Prop'])
-parsePropList f
-  = mapLeft errorBundlePretty  . parse prop'List f
-  <$> T.readFile f
+parseListOf :: Parser a -> FilePath -> IO (Either String [a])
+parseListOf p f
+  = prettifyErr . parse (listOf p) f <$> T.readFile f
 
-mapLeft :: (a -> b) -> Either a x -> Either b x
-mapLeft f = either (Left . f) Right
+listOf :: Parser a -> Parser [a]
+listOf p = p `endBy1` eol <* skipManyTill space eof
 
-prop'List :: Parser [Prop']
-prop'List = prop' `endBy1` eol <* skipManyTill space eof
+prettifyErr :: Either Err a -> Either String a
+prettifyErr = either (Left . errorBundlePretty) Right
 
 prop' :: Parser Prop'
 prop' = do
@@ -58,6 +68,14 @@ prop' = do
     , pProp
     , if T.null pFile then Nothing else Just (T.unpack pFile)
     )
+
+def' :: Parser (Text, Prop)
+def' = do
+  dName <- takeWhile1P (Just "name") (/= '\t')
+  void tab
+  dProp <- lex "`" *> prop <* lex "`" <?> "proposition"
+  return (dName, dProp)
+
 
 expr :: Parser Expr
 expr = conjunction <?> "expression"
@@ -109,16 +127,16 @@ exVars = lex "?" *> some atom <* lex "." <?> "existential"
 prop :: Parser Prop
 prop = do
   ex1 <- expr
-  res <- optional $ do
-    void $ lex "==>"
-    (,)
-      <$> (fromMaybe [] <$> optional exVars)
-      <*> expr
+  res <- optional $ (,,)
+    <$> (Implication <$ lex "==>"
+      <|>  Equivalence <$ lex "<=>")
+    <*> (fromMaybe [] <$> optional exVars)
+    <*> expr
   pure $ case res of
     -- ex1 is a consequent without context
-    Nothing -> Prop [] [] ex1
+    Nothing -> Prop Implication [] [] ex1
     -- ex1 is an antecedent and we unfold it to form context
-    Just (vars, ex2) -> Prop (unfoldAnd ex1) vars ex2
+    Just (knd, vars, ex2) -> Prop knd (unfoldAnd ex1) vars ex2
       where
         unfoldAnd = \case
           E.Expr E.AN xs -> xs
