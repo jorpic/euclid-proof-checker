@@ -25,9 +25,9 @@ source-repository head
 
 library
   exposed-modules:
-      Expr
+      Parser
       ProofChecker
-      Prop
+      Types
   other-modules:
       Paths_euclid_proof_checker
   hs-source-dirs:

@@ -1,4 +1,4 @@
-module Expr where
+module Types where
 
 import Control.Category ((>>>))
 import Prelude hiding (Ordering(..))
@@ -78,7 +78,23 @@ readFn = reads >>> \case
   [(x,"")] -> Just x
   _ -> Nothing
 
+-- Expression mixes logical functors like NO, AN, OR, and geometrical
+-- relations (all other functors).
 data Expr
   = Expr Fn [Expr]
   | Atom Char -- FIXME: rename atoms to vars or primitives?
   deriving (Show, Eq)
+
+
+-- Proposition is either implication or equvalence.
+data Prop = Prop
+  { kind :: PropKind
+  , from :: [Expr]   -- antecedent = conjunction of expressions
+                     --   (can be empty, e.g. `EQ A A`)
+  , ex   :: [Char]   -- existential variables
+  , to   :: Expr     -- consequent
+  }
+  deriving (Eq, Show)
+
+data PropKind = Implication | Equivalence
+  deriving (Eq, Show)

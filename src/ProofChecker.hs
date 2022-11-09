@@ -11,7 +11,7 @@ import Data.List.Split (splitOn)
 import Data.Map (Map)
 import Data.Map qualified as Map
 
-import Expr
+import Types
 
 guardE :: Bool -> String -> Result ()
 guardE c err = if c then Right () else Left err

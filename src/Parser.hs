@@ -1,7 +1,5 @@
-module Prop
-  ( Prop(..)
-  , PropKind(..)
-  , parseListOf
+module Parser
+  ( listOf'
   , def'
   , prop'
   )
@@ -18,27 +16,15 @@ import Data.Void (Void)
 import Text.Megaparsec
 import Text.Megaparsec.Char
 
-import Expr (Expr)
-import Expr qualified as E
+import Types
 
-
-data PropKind = Implication | Equivalence
-  deriving (Eq, Show)
-
-data Prop = Prop
-  { kind :: PropKind
-  , from :: [Expr]
-  , ex   :: [Char]
-  , to   :: Expr
-  }
-  deriving (Eq, Show)
 
 type Parser a = Parsec Void Text a
 type Err = ParseErrorBundle Text Void
 type Prop' = (Text, Prop, Maybe FilePath)
 
-parseListOf :: Parser a -> FilePath -> IO (Either String [a])
-parseListOf p f
+listOf' :: Parser a -> FilePath -> IO (Either String [a])
+listOf' p f
   = prettifyErr . parse (listOf p) f <$> T.readFile f
 
 listOf :: Parser a -> Parser [a]
@@ -82,10 +68,10 @@ expr = conjunction <?> "expression"
   where
     conjunction
       = sepBy1 disjunction (lex "/\\")
-      >>= liftOne (E.Expr E.AN)
+      >>= liftOne (Expr AN)
     disjunction
       = sepBy1 simpleExpr (lex "\\/")
-      >>= liftOne (E.Expr E.OR)
+      >>= liftOne (Expr OR)
 
     liftOne fn = \case
       []  -> fail "impossible!"
@@ -95,26 +81,26 @@ expr = conjunction <?> "expression"
     simpleExpr  = negation <|> brackets <|> functor'
 
     negation
-      = E.Expr E.NO . (:[]) <$> (lex "~" *> expr)
+      = Expr NO . (:[]) <$> (lex "~" *> expr)
 
     brackets
       = lex "(" *> expr <* lex ")"
 
     functor' = lex functor >>= \case
-      E.AN -> fail "unexpected AN functor (use /\\ instead)"
-      E.OR -> fail "unexpected OR functor (use \\/ instead)"
-      E.NO -> fail "unexpected NO functor (use ~(...) instead)"
+      AN -> fail "unexpected AN functor (use /\\ instead)"
+      OR -> fail "unexpected OR functor (use \\/ instead)"
+      NO -> fail "unexpected NO functor (use ~(...) instead)"
       fn -> some atom >>= \case
-        args | length args == E.arity fn
-          -> pure $ E.Expr fn (map E.Atom args)
+        args | length args == arity fn
+          -> pure $ Expr fn (map Atom args)
         _ -> fail
-          $ "expected " <> show (E.arity fn)
+          $ "expected " <> show (arity fn)
           <> " arguments for functor " <> show fn
 
-functor :: Parser E.Fn
+functor :: Parser Fn
 functor = do
   fn <- takeP (Just "functor") 2
-  case E.readFn (T.unpack fn) of
+  case readFn (T.unpack fn) of
     Just x -> pure x
     Nothing -> fail $ "invalid functor: " <>  show fn
 
@@ -139,7 +125,7 @@ prop = do
     Just (knd, vars, ex2) -> Prop knd (unfoldAnd ex1) vars ex2
       where
         unfoldAnd = \case
-          E.Expr E.AN xs -> xs
+          Expr AN xs -> xs
           x -> [x]
 
 lex :: Parser a -> Parser a
