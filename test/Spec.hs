@@ -9,6 +9,7 @@ import Data.ByteString.Lazy.Char8 qualified as B (lines, readFile)
 import GHC.Generics
 import Test.Hspec
 
+import ParserSpec qualified
 import ProofChecker (parseExpr, unify')
 
 data UnificationExample = UnificationExample
@@ -23,6 +24,8 @@ instance Aeson.FromJSON UnificationExample
 
 main :: IO ()
 main = do
+  hspec ParserSpec.spec
+
   -- this file was generated from tracing ./CheckProofs.php
   jsonl <- B.lines <$> B.readFile "test/unification.jsonl"
 

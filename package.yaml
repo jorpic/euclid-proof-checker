@@ -62,6 +62,8 @@ tests:
     dependencies:
     - euclid-proof-checker
     - hspec
+    - hspec-megaparsec
+    - megaparsec
     - aeson
     - bytestring
     - text

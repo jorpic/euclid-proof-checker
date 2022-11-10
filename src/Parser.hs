@@ -3,6 +3,8 @@ module Parser
   , def'
   , prop'
   , proofBlock
+  , exprCC
+  , exprHR
   )
   where
 
