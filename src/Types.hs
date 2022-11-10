@@ -2,6 +2,7 @@ module Types where
 
 import Control.Category ((>>>))
 import Prelude hiding (Ordering(..))
+import Data.Text qualified as S
 
 data Fn
   = BR | FR | TF
@@ -13,7 +14,7 @@ data Fn
   | PE | TG | TT | IA | RT | AS
   | PG | SQ | EF | ET | RE | RC
   | ER | TE | FE | AN | OR | NO
-  deriving (Eq, Show, Read)
+  deriving (Eq, Ord, Show, Read)
 
 arity :: Fn -> Int
 arity = \case
@@ -83,7 +84,7 @@ readFn = reads >>> \case
 data Expr
   = Expr Fn [Expr]
   | Atom Char -- FIXME: rename atoms to vars or primitives?
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 
 -- Proposition is either implication or equvalence.
@@ -97,4 +98,11 @@ data Prop = Prop
   deriving (Eq, Show)
 
 data PropKind = Implication | Equivalence
+  deriving (Eq, Show)
+
+type Proof = [ProofBlock]
+data ProofBlock
+  = Exact Expr S.Text
+  | Reductio Expr Proof
+  | Cases Expr [(Expr, Proof)]
   deriving (Eq, Show)

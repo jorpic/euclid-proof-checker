@@ -1,5 +1,6 @@
 module Main (main) where
 
+import Control.Monad (forM_)
 import System.Environment (getArgs)
 import System.FilePath ((</>))
 import Parser qualified
@@ -19,3 +20,13 @@ main' proofDir = do
 
   print $ length defs
   print $ length props
+
+  forM_ props $ \case
+    (name, prop, Just file) -> do
+      print (name, file)
+      print prop
+      proof <- Parser.listOf' Parser.proofBlock (proofDir </> file)
+        >>= either fail pure
+      mapM_ print proof
+
+    _ -> return ()

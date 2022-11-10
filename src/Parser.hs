@@ -2,18 +2,20 @@ module Parser
   ( listOf'
   , def'
   , prop'
+  , proofBlock
   )
   where
 
 import Prelude hiding (lex)
-import Control.Monad (void)
+import Control.Monad (void, forM)
 import Data.Char qualified as Char
 import Data.Maybe (fromMaybe)
+import Data.Text qualified as TS
 import Data.Text.Lazy (Text)
 import Data.Text.Lazy qualified as T
 import Data.Text.Lazy.IO qualified as T
 import Data.Void (Void)
-import Text.Megaparsec
+import Text.Megaparsec hiding (Token)
 import Text.Megaparsec.Char
 
 import Types
@@ -23,15 +25,55 @@ type Parser a = Parsec Void Text a
 type Err = ParseErrorBundle Text Void
 type Prop' = (Text, Prop, Maybe FilePath)
 
+
 listOf' :: Parser a -> FilePath -> IO (Either String [a])
 listOf' p f
-  = prettifyErr . parse (listOf p) f <$> T.readFile f
-
-listOf :: Parser a -> Parser [a]
-listOf p = p `endBy1` eol <* skipManyTill space eof
+  = prettifyErr . parse (many $ p <* space) f <$> T.readFile f
 
 prettifyErr :: Either Err a -> Either String a
 prettifyErr = either (Left . errorBundlePretty) Right
+
+-- FIXME: expalin that we have two syntaxes for expressions
+--  - concise one like this: ANEABAFFAC+IABACF
+--  - and human readable like this: ~(LT C D A B) /\ NE A B /\ NE C D
+
+proofBlock :: Parser ProofBlock
+proofBlock = skipMany " " >> (cases <|> other)
+  where
+    oneCase :: Parser (Expr, Proof)
+    oneCase = do
+      void $ lex "case" >> lex (some digitChar) >> lex ":"
+      cs <- lex exprCC <* eol
+      proof <- proofBlock `manyTill` (skipMany " " >> "qedcase")
+      return (cs, proof)
+
+    cases = do
+      goal <- lex "cases" *> exprCC <* lex ":"
+      caseExprs <- lex $ exprCC `sepBy1` "|"
+      eol >> space
+      cases' <- forM caseExprs $ \ex -> skipMany " " >> oneCase >>= \case
+        cs@(ex', _proof) | ex' == ex -> pure cs
+        _ -> fail "case does not match the one declared in head"
+      (lex exprCC <* "cases")  >>= \case
+        ex' | ex' == goal -> pure $ Cases goal cases'
+        _ -> fail "case result does not match declared case goal"
+
+    other = Exact
+      <$> lex exprCC
+      <*> (TS.strip . TS.pack <$> manyTill asciiChar (void eol <|> eof))
+
+exprCC :: Parser Expr
+exprCC = do
+  fn <- functor
+  Expr fn <$> case fn of
+    NO -> (:[]) <$> exprCC
+    AN -> sepBy1 exprCC "+"
+    OR -> sepBy1 exprCC "|"
+    _ -> do
+      args <- T.unpack <$> takeWhile1P (Just "args") Char.isAlpha
+      if length args == arity fn
+         then pure $ map Atom args
+         else fail "number of arguments does not match functor arity"
 
 prop' :: Parser Prop'
 prop' = do
@@ -63,8 +105,8 @@ def' = do
   return (dName, dProp)
 
 
-expr :: Parser Expr
-expr = conjunction <?> "expression"
+exprHR :: Parser Expr
+exprHR = conjunction <?> "expression"
   where
     conjunction
       = sepBy1 disjunction (lex "/\\")
@@ -81,10 +123,10 @@ expr = conjunction <?> "expression"
     simpleExpr  = negation <|> brackets <|> functor'
 
     negation
-      = Expr NO . (:[]) <$> (lex "~" *> expr)
+      = Expr NO . (:[]) <$> (lex "~" *> exprHR)
 
     brackets
-      = lex "(" *> expr <* lex ")"
+      = lex "(" *> exprHR <* lex ")"
 
     functor' = lex functor >>= \case
       AN -> fail "unexpected AN functor (use /\\ instead)"
@@ -112,12 +154,12 @@ exVars = lex "?" *> some atom <* lex "." <?> "existential"
 
 prop :: Parser Prop
 prop = do
-  ex1 <- expr
+  ex1 <- exprHR
   res <- optional $ (,,)
     <$> (Implication <$ lex "==>"
       <|>  Equivalence <$ lex "<=>")
     <*> (fromMaybe [] <$> optional exVars)
-    <*> expr
+    <*> exprHR
   pure $ case res of
     -- ex1 is a consequent without context
     Nothing -> Prop Implication [] [] ex1
