@@ -64,6 +64,7 @@ tests:
     - hspec
     - hspec-megaparsec
     - megaparsec
+    - neat-interpolation
     - aeson
     - bytestring
     - text

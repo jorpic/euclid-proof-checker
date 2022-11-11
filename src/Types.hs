@@ -103,6 +103,6 @@ data PropKind = Implication | Equivalence
 type Proof = [ProofBlock]
 data ProofBlock
   = Exact Expr S.Text
-  | Reductio Expr Proof
+  | Reductio Expr Expr Proof
   | Cases Expr [(Expr, Proof)]
   deriving (Eq, Show)

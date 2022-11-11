@@ -1,9 +1,12 @@
+{-# LANGUAGE QuasiQuotes #-}
 module ParserSpec (spec) where
 
 import Prelude hiding (Ordering(..))
+import Data.Text.Lazy qualified as T
 import Test.Hspec
 import Test.Hspec.Megaparsec
 import Text.Megaparsec (parse, ErrorFancy(ErrorFail))
+import NeatInterpolation (text)
 
 import Types hiding (ex)
 import Parser
@@ -82,6 +85,42 @@ spec = do
           ("unequal"
           , Prop Equivalence [ex NE "AB"] "" (Expr NO [ex EQ "AB"])
           )
+
+  describe "proof" $ do
+    let parsesTo a b = parse proofBlock "" a `shouldParse` b
+    it "parses inferred expression" $
+      "EEACac" `parsesTo` Exact (ex EE "ACac") ""
+    it "parses inferred expression with reference" $
+      "EEAAab  cn:equalitysub"
+        `parsesTo`
+          (Exact (ex EE "AAab") "cn:equalitysub")
+
+    it "parses proof by cases" $
+      parsesTo
+        (T.fromStrict [text|
+          cases EEBCbc:EQBA|NEBA
+           case 1: EQBA
+            EQab    axiom:nullsegment1
+           qedcase
+           case 2: NEBA
+            EEbcac   cn:equalitysub
+           qedcase
+          EEBCbc  cases
+        |])
+        $ Cases (ex EE "BCbc")
+          [ (ex EQ "BA", [Exact (ex EQ "ab") "axiom:nullsegment1"])
+          , (ex NE "BA", [Exact (ex EE "cac") "cn:equalitysub"])
+          ]
+
+    it "parses proof by contradiction" $
+      parsesTo
+        (T.fromStrict [text|
+          COCBA   assumption
+           COABC  lemma:collinearorder
+          NCCBA   reductio
+        |])
+        $ Reductio (ex CO "CBA") (ex NC "CBA")
+          [Exact (ex CO "ABC") "lemma:collinearorder"]
 
 ex :: Fn -> String -> Expr
 ex fn = Expr fn . map Atom
