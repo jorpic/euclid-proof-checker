@@ -85,6 +85,7 @@ data Expr
   = Expr Fn [Expr]
   | Atom Char -- FIXME: rename atoms to vars or primitives?
   deriving (Show, Eq, Ord)
+  -- FIXME: split to logical (AN, OR, NO) and geometrical functors
 
 
 -- Proposition is either implication or equvalence.
@@ -102,7 +103,7 @@ data PropKind = Implication | Equivalence
 
 type Proof = [ProofBlock]
 data ProofBlock
-  = Exact Expr S.Text
+  = Infer Expr S.Text
   | Reductio Expr Expr Proof
   | Cases Expr [(Expr, Proof)]
   deriving (Eq, Show)

@@ -89,11 +89,11 @@ spec = do
   describe "proof" $ do
     let parsesTo a b = parse proofBlock "" a `shouldParse` b
     it "parses inferred expression" $
-      "EEACac" `parsesTo` Exact (ex EE "ACac") ""
+      "EEACac" `parsesTo` Infer (ex EE "ACac") ""
     it "parses inferred expression with reference" $
       "EEAAab  cn:equalitysub"
         `parsesTo`
-          (Exact (ex EE "AAab") "cn:equalitysub")
+          (Infer (ex EE "AAab") "cn:equalitysub")
 
     it "parses proof by cases" $
       parsesTo
@@ -108,8 +108,8 @@ spec = do
           EEBCbc  cases
         |])
         $ Cases (ex EE "BCbc")
-          [ (ex EQ "BA", [Exact (ex EQ "ab") "axiom:nullsegment1"])
-          , (ex NE "BA", [Exact (ex EE "cac") "cn:equalitysub"])
+          [ (ex EQ "BA", [Infer (ex EQ "ab") "axiom:nullsegment1"])
+          , (ex NE "BA", [Infer (ex EE "bcac") "cn:equalitysub"])
           ]
 
     it "parses proof by contradiction" $
@@ -120,7 +120,7 @@ spec = do
           NCCBA   reductio
         |])
         $ Reductio (ex CO "CBA") (ex NC "CBA")
-          [Exact (ex CO "ABC") "lemma:collinearorder"]
+          [Infer (ex CO "ABC") "lemma:collinearorder"]
 
 ex :: Fn -> String -> Expr
 ex fn = Expr fn . map Atom

@@ -9,7 +9,7 @@ module Parser
   where
 
 import Prelude hiding (lex)
-import Control.Monad (void, forM)
+import Control.Monad (void, forM, when)
 import Data.Char qualified as Char
 import Data.Maybe (fromMaybe)
 import Data.Text qualified as TS
@@ -19,6 +19,7 @@ import Data.Text.Lazy.IO qualified as T
 import Data.Void (Void)
 import Text.Megaparsec hiding (Token)
 import Text.Megaparsec.Char
+import Text.Megaparsec.Char.Lexer (decimal)
 
 import Types
 
@@ -26,7 +27,6 @@ import Types
 type Parser a = Parsec Void Text a
 type Err = ParseErrorBundle Text Void
 type Prop' = (Text, Prop, Maybe FilePath)
-
 
 listOf' :: Parser a -> FilePath -> IO (Either String [a])
 listOf' p f
@@ -40,29 +40,42 @@ prettifyErr = either (Left . errorBundlePretty) Right
 --  - and human readable like this: ~(LT C D A B) /\ NE A B /\ NE C D
 
 proofBlock :: Parser ProofBlock
-proofBlock = skipMany " " >> (cases <|> other)
+proofBlock = space >> choice
+  [ kw "cases" *> proofByCases
+  , lex exprCC >>= \ex ->
+    choice
+      [ kw "assumption" >> ln >> proofByContradiction ex
+      , kw "reductio" >> fail "reductio without assumption"
+      , Infer ex . TS.strip . TS.pack <$> many printChar
+      ]
+  ]
   where
-    oneCase :: Parser (Expr, Proof)
-    oneCase = do
-      void $ lex "case" >> lex (some digitChar) >> lex ":"
-      cs <- lex exprCC <* eol
-      proof <- proofBlock `manyTill` (skipMany " " >> "qedcase")
-      return (cs, proof)
+    proofByCases = do
+      goal <- lex exprCC <* lex ":"
+      cases <- lex (exprCC `sepBy1` "|") <* ln
+      proofs <- forM (zip [1..] cases) ((<* ln) . oneCaseProof)
+      goal' <- lex exprCC <* kw "cases"
+      when (goal' /= goal)
+        $ fail "case conclusion does not match the goal"
+      return $ Cases goal proofs
 
-    cases = do
-      goal <- lex "cases" *> exprCC <* lex ":"
-      caseExprs <- lex $ exprCC `sepBy1` "|"
-      eol >> space
-      cases' <- forM caseExprs $ \ex -> skipMany " " >> oneCase >>= \case
-        cs@(ex', _proof) | ex' == ex -> pure cs
-        _ -> fail "case does not match the one declared in head"
-      (lex exprCC <* "cases")  >>= \case
-        ex' | ex' == goal -> pure $ Cases goal cases'
-        _ -> fail "case result does not match declared case goal"
+    oneCaseProof :: (Int, Expr) -> Parser (Expr, Proof)
+    oneCaseProof (i, ex) = do
+      i' <- kw "case" *> lex decimal <* lex ":"
+      when (i' /= i)
+        $ fail "case numbers mus be consecutive"
+      ex' <- lex exprCC <* ln
+      when (ex' /= ex)
+        $ fail "invalid case expression"
+      proof <- (proofBlock <* ln) `someTill` (kw "qedcase")
+      return (ex, proof)
 
-    other = Exact
-      <$> lex exprCC
-      <*> (TS.strip . TS.pack <$> manyTill asciiChar (void eol <|> eof))
+    proofByContradiction ex = do
+      (proof, conclusion) <-
+        (proofBlock <* ln) `manyTill_` (try $ lex exprCC <* kw "reductio")
+      return $ Reductio ex conclusion proof
+
+
 
 exprCC :: Parser Expr
 exprCC = do
@@ -172,5 +185,11 @@ prop = do
           Expr AN xs -> xs
           x -> [x]
 
-lex :: Parser a -> Parser a
-lex p = p <* skipMany (hidden " ")
+lex, kw :: Parser a -> Parser a
+lex p = p <* skipMany (hidden " ") -- FIXME: hspace?
+kw p = lex $ try $ p <* lookAhead (space1 <|> eof)
+ln :: Parser ()
+ln = eol >> hidden space
+
+linesOf :: Parser a -> Parser [a]
+linesOf p = space *> some (p <* (ln <|> lookAhead eof)) <* eof
