@@ -26,7 +26,6 @@ source-repository head
 library
   exposed-modules:
       Parser
-      ProofChecker
       Types
   other-modules:
       Paths_euclid_proof_checker
@@ -80,10 +79,7 @@ test-suite euclid-proof-checker-test
       RecordWildCards
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
-      aeson
-    , base >=4.7 && <5
-    , bytestring
-    , containers
+      base >=4.7 && <5
     , euclid-proof-checker
     , hspec
     , hspec-megaparsec

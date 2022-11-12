@@ -65,7 +65,4 @@ tests:
     - hspec-megaparsec
     - megaparsec
     - neat-interpolation
-    - aeson
-    - bytestring
     - text
-    - containers
