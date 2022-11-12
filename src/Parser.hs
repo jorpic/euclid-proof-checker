@@ -152,7 +152,10 @@ lex, kw :: Parser a -> Parser a
 lex p = p <* skipMany (hidden " ") -- FIXME: hspace?
 kw p = lex $ try $ p <* lookAhead (space1 <|> eof)
 ln :: Parser ()
-ln = eol >> hidden space
+ln = eol >> skipMany (choice
+  [ void $ "%" >> skipManyTill anySingle eol
+  , hidden space1
+  ])
 
 linesOf :: Parser a -> Parser [a]
 linesOf p = space *> some (p <* (ln <|> lookAhead eof)) <* eof
