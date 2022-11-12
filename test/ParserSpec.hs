@@ -56,21 +56,21 @@ spec = do
       "lemma\txxx\t`EQ A B ==> ?X. EQ B X`\t"
         `parsesTo`
           ( "lemma:xxx"
-          , Prop Implication [Fun EQ "AB"] "X" (Fun EQ "BX")
+          , Prop [Fun EQ "AB"] "X" (Fun EQ "BX")
           , Nothing
           )
     it "parses a proposition without context" $
       "lemma\txxx\t`EQ a a`\t"
         `parsesTo`
           ( "lemma:xxx"
-          , Prop Implication [] "" (Fun EQ "aa")
+          , Prop [] "" (Fun EQ "aa")
           , Nothing
           )
     it "parses complex proposition" $
       "cn\tx\t`PG A B C D /\\ BE A E D ==> ?X. BE B X D /\\ BE C X E`\tfile.prf"
         `parsesTo`
           ( "cn:x"
-          , Prop Implication
+          , Prop 
             [Fun PG "ABCD", Fun BE "AED"]
             "X"
             (AN [Fun BE "BXD", Fun BE "CXE"])
@@ -78,12 +78,13 @@ spec = do
           )
 
   describe "definition" $ do
-    let parsesTo a b = parse def' "" a `shouldParse` b
+    let parsesTo a b = parse prop' "" a `shouldParse` b
     it "parses simple definition" $
       "unequal\t`NE A B <=> ~(EQ A B)`"
         `parsesTo`
-          ("unequal"
-          , Prop Equivalence [Fun NE "AB"] "" (NO (Fun EQ "AB"))
+          ("defn:unequal"
+          , Prop [Fun NE "AB"] "" (NO (Fun EQ "AB"))
+          , Nothing
           )
 
   describe "proof" $ do

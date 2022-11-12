@@ -1,6 +1,5 @@
 module Parser
   ( listOf'
-  , def'
   , prop'
   , proofBlock
   , exprCC
@@ -10,11 +9,9 @@ module Parser
 
 import Prelude hiding (lex)
 import Control.Monad (void, forM, when)
-import Data.Char qualified as Char
 import Data.Maybe (fromMaybe)
 import Data.Text qualified as TS
 import Data.Text.Lazy (Text)
-import Data.Text.Lazy qualified as T
 import Data.Text.Lazy.IO qualified as T
 import Data.Void (Void)
 import Text.Megaparsec hiding (Token)
@@ -115,53 +112,43 @@ readFnArgs p s = case reads s of
 prop' :: Parser Prop'
 prop' = do
   pType <- choice
-    [ "cn"
-    , "axiom"
-    , "postulate"
-    , "proposition"
-    , "lemma"
+    [ "cn"          <* tab
+    , "axiom"       <* tab
+    , "postulate"   <* tab
+    , "proposition" <* tab
+    , "lemma"       <* tab
+    , pure "defn"
     ]
-  void tab
   pName <- takeWhile1P (Just "name") (/= '\t')
   void tab
   pProp <- lex "`" *> prop <* lex "`" <?> "proposition"
-  void tab
-  pFile <- takeWhileP (Just "proof file") (Char.isPrint)
+  hspace
+  pFile <- optional $ some printChar <* hspace
 
   return
-    ( pType <> ":" <> pName
+    ( pType <> ":" <> pName -- FIXME: T.toStrict
     , pProp
-    , if T.null pFile then Nothing else Just (T.unpack pFile)
+    , pFile
     )
-
-def' :: Parser (Text, Prop)
-def' = do
-  dName <- takeWhile1P (Just "name") (/= '\t')
-  void tab
-  dProp <- lex "`" *> prop <* lex "`" <?> "proposition"
-  return (dName, dProp)
-
 
 exVars :: Parser [Char]
 exVars = lex "?" *> some (lex letterChar) <* lex "." <?> "existential"
 
 prop :: Parser Prop
-prop = do
-  ex1 <- exprHR
-  res <- optional $ (,,)
-    <$> (Implication <$ lex "==>"
-      <|>  Equivalence <$ lex "<=>")
-    <*> (fromMaybe [] <$> optional exVars)
-    <*> exprHR
-  pure $ case res of
-    -- ex1 is a consequent without context
-    Nothing -> Prop Implication [] [] ex1
-    -- ex1 is an antecedent and we unfold it to form context
-    Just (knd, vars, ex2) -> Prop knd (unfoldAnd ex1) vars ex2
-      where
-        unfoldAnd = \case
-          AN xs -> xs
-          x -> [x]
+prop = exprHR >>= \ex1 ->
+  choice
+    [ -- ex1 is an antecedent and we unfold it to form context
+      (lex $ "==>" <|>  "<=>")
+      >> Prop (unfoldAnd ex1)
+        <$> (fromMaybe [] <$> optional exVars)
+        <*> exprHR
+      -- ex1 is a consequent without context
+    , pure $ Prop [] [] ex1
+    ]
+  where
+    unfoldAnd = \case
+      AN xs -> xs
+      x -> [x]
 
 lex, kw :: Parser a -> Parser a
 lex p = p <* skipMany (hidden " ") -- FIXME: hspace?

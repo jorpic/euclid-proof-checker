@@ -12,7 +12,7 @@ main = getArgs >>= \case
 
 main' :: FilePath -> IO ()
 main' proofDir = do
-  defs <- Parser.listOf' Parser.def' (proofDir </> "Definitions.txt")
+  defs <- Parser.listOf' Parser.prop' (proofDir </> "Definitions.txt")
     >>= either fail pure
 
   props <- Parser.listOf' Parser.prop' (proofDir </> "Theorems.txt")
@@ -20,6 +20,9 @@ main' proofDir = do
 
   print $ length defs
   print $ length props
+
+  forM_ defs print
+  forM_ props print
 
   forM_ props $ \case
     (name, prop, Just file) -> do

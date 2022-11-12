@@ -83,15 +83,11 @@ data Expr
 
 -- Proposition is either implication or equivalence.
 data Prop = Prop
-  { kind :: PropKind
-  , from :: [Expr]   -- antecedent = conjunction of expressions
+  { from :: [Expr]   -- antecedent = conjunction of expressions
                      --   (can be empty, e.g. `EQ A A`)
   , ex   :: [Char]   -- existential variables
   , to   :: Expr     -- consequent
   }
-  deriving (Eq, Show)
-
-data PropKind = Implication | Equivalence
   deriving (Eq, Show)
 
 type Proof = [ProofBlock]
