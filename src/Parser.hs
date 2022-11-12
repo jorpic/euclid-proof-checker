@@ -16,7 +16,6 @@ import Data.Text.Lazy.IO qualified as T
 import Data.Void (Void)
 import Text.Megaparsec hiding (Token)
 import Text.Megaparsec.Char
-import Text.Megaparsec.Char.Lexer (decimal)
 
 import Types
 
@@ -50,17 +49,16 @@ proofBlock = space >> choice
     proofByCases = do
       goal <- lex exprCC <* lex ":"
       cases <- lex (exprCC `sepBy1` "|") <* ln
-      proofs <- forM (zip [1..] cases) ((<* ln) . oneCaseProof)
+      proofs <- forM cases ((<* ln) . oneCaseProof)
       goal' <- lex exprCC <* kw "cases"
       when (goal' /= goal)
         $ fail "case conclusion does not match the goal"
       return $ Cases goal proofs
 
-    oneCaseProof :: (Int, Expr) -> Parser (Expr, Proof)
-    oneCaseProof (i, ex) = do
-      i' <- kw "case" *> lex decimal <* lex ":"
-      when (i' /= i)
-        $ fail "case numbers must be consecutive"
+    oneCaseProof :: Expr -> Parser (Expr, Proof)
+    oneCaseProof ex = do
+      -- NB. case number checking was deliberatly disabled
+      kw "case" >> skipManyTill anySingle ":" >> hspace
       ex' <- lex exprCC <* ln
       when (ex' /= ex)
         $ fail "invalid case expression"
