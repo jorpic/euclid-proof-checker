@@ -64,7 +64,7 @@ proofBlock = space >> choice
       ex' <- lex exprCC <* ln
       when (ex' /= ex)
         $ fail "invalid case expression"
-      proof <- (proofBlock <* ln) `someTill` (kw "qedcase")
+      proof <- (proofBlock <* ln) `manyTill` (kw "qedcase")
       return (ex, proof)
 
     proofByContradiction ex = do
