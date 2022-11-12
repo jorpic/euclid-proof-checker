@@ -17,38 +17,38 @@ spec = do
   describe "exprCC" $ do
     let parsesTo a b = parse exprCC "" a `shouldParse` b
     it "parses single functor" $
-      "LTABCD" `parsesTo` ex LT "ABCD"
+      "LTABCD" `parsesTo` Fun LT "ABCD"
     it "checks functor arity" $
       parse exprCC "" "LTABCDEF"
         `shouldFailWith`
           errFancy 8 (fancy
             $ ErrorFail "number of arguments does not match functor arity")
     it "parses AND functor" $
-      "ANNEAB+NECD" `parsesTo` Expr AN [ex NE "AB", ex NE "CD"]
+      "ANNEAB+NECD" `parsesTo` AN [Fun NE "AB", Fun NE "CD"]
     it "parses OR functor" $
-      "ORNEAB|NECD" `parsesTo` Expr OR [ex NE "AB", ex NE "CD"]
+      "ORNEAB|NECD" `parsesTo` OR [Fun NE "AB", Fun NE "CD"]
     it "parses NO functor" $
-      "NONEAB" `parsesTo` Expr NO [ex NE "AB"]
+      "NONEAB" `parsesTo` NO (Fun NE "AB")
 
   describe "exprHR" $ do
     let parsesTo a b = parse exprHR "" a `shouldParse` b
     it "parses single functor without spaces" $
-      "LTABCD" `parsesTo` ex LT "ABCD"
+      "LTABCD" `parsesTo` Fun LT "ABCD"
     it "parses single functor with spaces" $
-      "LT A B C D" `parsesTo` ex LT "ABCD"
+      "LT A B C D" `parsesTo` Fun LT "ABCD"
     it "checks functor arity" $
       parse exprCC "" "LTABCDEF"
         `shouldFailWith`
           errFancy 8 (fancy
             $ ErrorFail "number of arguments does not match functor arity")
     it "parses AND functor" $
-      "NEAB /\\ NECD" `parsesTo` Expr AN [ex NE "AB", ex NE "CD"]
+      "NEAB /\\ NECD" `parsesTo` AN [Fun NE "AB", Fun NE "CD"]
     it "parses OR functor" $
-      "NEAB \\/ NECD" `parsesTo` Expr OR [ex NE "AB", ex NE "CD"]
+      "NEAB \\/ NECD" `parsesTo` OR [Fun NE "AB", Fun NE "CD"]
     it "parses NO functor" $
       "~(NEAB \\/ NECD)"
         `parsesTo`
-          Expr NO [Expr OR [ex NE "AB", ex NE "CD"]]
+          NO (OR [Fun NE "AB", Fun NE "CD"])
 
   describe "proposition" $ do
     let parsesTo a b = parse prop' "" a `shouldParse` b
@@ -56,14 +56,14 @@ spec = do
       "lemma\txxx\t`EQ A B ==> ?X. EQ B X`\t"
         `parsesTo`
           ( "lemma:xxx"
-          , Prop Implication [ex EQ "AB"] "X" (ex EQ "BX")
+          , Prop Implication [Fun EQ "AB"] "X" (Fun EQ "BX")
           , Nothing
           )
     it "parses a proposition without context" $
       "lemma\txxx\t`EQ a a`\t"
         `parsesTo`
           ( "lemma:xxx"
-          , Prop Implication [] "" (ex EQ "aa")
+          , Prop Implication [] "" (Fun EQ "aa")
           , Nothing
           )
     it "parses complex proposition" $
@@ -71,9 +71,9 @@ spec = do
         `parsesTo`
           ( "cn:x"
           , Prop Implication
-            [ex PG "ABCD", ex BE "AED"]
+            [Fun PG "ABCD", Fun BE "AED"]
             "X"
-            (Expr AN [ex BE "BXD", ex BE "CXE"])
+            (AN [Fun BE "BXD", Fun BE "CXE"])
           , Just "file.prf"
           )
 
@@ -83,17 +83,17 @@ spec = do
       "unequal\t`NE A B <=> ~(EQ A B)`"
         `parsesTo`
           ("unequal"
-          , Prop Equivalence [ex NE "AB"] "" (Expr NO [ex EQ "AB"])
+          , Prop Equivalence [Fun NE "AB"] "" (NO (Fun EQ "AB"))
           )
 
   describe "proof" $ do
     let parsesTo a b = parse proofBlock "" a `shouldParse` b
     it "parses inferred expression" $
-      "EEACac" `parsesTo` Infer (ex EE "ACac") ""
+      "EEACac" `parsesTo` Infer (Fun EE "ACac") ""
     it "parses inferred expression with reference" $
       "EEAAab  cn:equalitysub"
         `parsesTo`
-          (Infer (ex EE "AAab") "cn:equalitysub")
+          (Infer (Fun EE "AAab") "cn:equalitysub")
 
     it "parses proof by cases" $
       parsesTo
@@ -107,9 +107,9 @@ spec = do
            qedcase
           EEBCbc  cases
         |])
-        $ Cases (ex EE "BCbc")
-          [ (ex EQ "BA", [Infer (ex EQ "ab") "axiom:nullsegment1"])
-          , (ex NE "BA", [Infer (ex EE "bcac") "cn:equalitysub"])
+        $ Cases (Fun EE "BCbc")
+          [ (Fun EQ "BA", [Infer (Fun EQ "ab") "axiom:nullsegment1"])
+          , (Fun NE "BA", [Infer (Fun EE "bcac") "cn:equalitysub"])
           ]
 
     it "parses proof by contradiction" $
@@ -119,8 +119,5 @@ spec = do
            COABC  lemma:collinearorder
           NCCBA   reductio
         |])
-        $ Reductio (ex CO "CBA") (ex NC "CBA")
-          [Infer (ex CO "ABC") "lemma:collinearorder"]
-
-ex :: Fn -> String -> Expr
-ex fn = Expr fn . map Atom
+        $ Reductio (Fun CO "CBA") (Fun NC "CBA")
+          [Infer (Fun CO "ABC") "lemma:collinearorder"]

@@ -1,6 +1,5 @@
 module Types where
 
-import Control.Category ((>>>))
 import Prelude hiding (Ordering(..))
 import Data.Text qualified as S
 
@@ -13,7 +12,7 @@ data Fn
   | RR | MI | IS | PA | PR | TP
   | PE | TG | TT | IA | RT | AS
   | PG | SQ | EF | ET | RE | RC
-  | ER | TE | FE | AN | OR | NO
+  | ER | TE | FE
   deriving (Eq, Ord, Show, Read)
 
 arity :: Fn -> Int
@@ -71,24 +70,18 @@ arity = \case
   ER -> 8 -- ABCD and abcd are equal rectangles (defined)
   TE -> 6 -- defined "equal triangles"
   FE -> 8 -- defined "equal quadrilaterals"
-  NO -> 1
-  _  -> 0 -- AND & OR have arbitrary arity (> 0)
-
-readFn :: String -> Maybe Fn
-readFn = reads >>> \case
-  [(x,"")] -> Just x
-  _ -> Nothing
 
 -- Expression mixes logical functors like NO, AN, OR, and geometrical
 -- relations (all other functors).
 data Expr
-  = Expr Fn [Expr]
-  | Atom Char -- FIXME: rename atoms to vars or primitives?
+  = AN [Expr]
+  | OR [Expr]
+  | NO Expr
+  | Fun Fn [Char]
   deriving (Show, Eq, Ord)
-  -- FIXME: split to logical (AN, OR, NO) and geometrical functors
 
 
--- Proposition is either implication or equvalence.
+-- Proposition is either implication or equivalence.
 data Prop = Prop
   { kind :: PropKind
   , from :: [Expr]   -- antecedent = conjunction of expressions

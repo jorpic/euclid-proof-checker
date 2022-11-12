@@ -63,7 +63,7 @@ proofBlock = space >> choice
     oneCaseProof (i, ex) = do
       i' <- kw "case" *> lex decimal <* lex ":"
       when (i' /= i)
-        $ fail "case numbers mus be consecutive"
+        $ fail "case numbers must be consecutive"
       ex' <- lex exprCC <* ln
       when (ex' /= ex)
         $ fail "invalid case expression"
@@ -79,16 +79,17 @@ proofBlock = space >> choice
 
 exprCC :: Parser Expr
 exprCC = do
-  fn <- functor
-  Expr fn <$> case fn of
-    NO -> (:[]) <$> exprCC
-    AN -> sepBy1 exprCC "+"
-    OR -> sepBy1 exprCC "|"
-    _ -> do
+  takeP (Just "functor") 2 >>= \case
+    "NO" -> NO <$> exprCC
+    "AN" -> AN <$> sepBy1 exprCC "+"
+    "OR" -> OR <$> sepBy1 exprCC "|"
+    fn -> do
+      fn' <- readFn fn
       args <- T.unpack <$> takeWhile1P (Just "args") Char.isAlpha
-      if length args == arity fn
-         then pure $ map Atom args
+      if length args == arity fn'
+         then pure $ Fun fn' args
          else fail "number of arguments does not match functor arity"
+
 
 prop' :: Parser Prop'
 prop' = do
@@ -125,10 +126,10 @@ exprHR = conjunction <?> "expression"
   where
     conjunction
       = sepBy1 disjunction (lex "/\\")
-      >>= liftOne (Expr AN)
+      >>= liftOne AN
     disjunction
       = sepBy1 simpleExpr (lex "\\/")
-      >>= liftOne (Expr OR)
+      >>= liftOne OR
 
     liftOne fn = \case
       []  -> fail "impossible!"
@@ -138,28 +139,28 @@ exprHR = conjunction <?> "expression"
     simpleExpr  = negation <|> brackets <|> functor'
 
     negation
-      = Expr NO . (:[]) <$> (lex "~" *> exprHR)
+      = NO <$> (lex "~" *> exprHR)
 
     brackets
       = lex "(" *> exprHR <* lex ")"
 
-    functor' = lex functor >>= \case
-      AN -> fail "unexpected AN functor (use /\\ instead)"
-      OR -> fail "unexpected OR functor (use \\/ instead)"
-      NO -> fail "unexpected NO functor (use ~(...) instead)"
-      fn -> some atom >>= \case
+    functor' = do
+      fn <- lex functor
+      some atom >>= \case
         args | length args == arity fn
-          -> pure $ Expr fn (map Atom args)
+          -> pure $ Fun fn args
         _ -> fail
           $ "expected " <> show (arity fn)
           <> " arguments for functor " <> show fn
 
 functor :: Parser Fn
-functor = do
-  fn <- takeP (Just "functor") 2
-  case readFn (T.unpack fn) of
-    Just x -> pure x
-    Nothing -> fail $ "invalid functor: " <>  show fn
+functor = takeP (Just "functor") 2 >>= readFn
+
+readFn :: Text -> Parser Fn
+readFn fn =
+  case reads $ T.unpack fn of
+    [(x,"")] -> pure x
+    _ -> fail $ "invalid functor: " <>  show fn
 
 atom :: Parser Char
 atom = lex $ satisfy Char.isAlpha
@@ -182,7 +183,7 @@ prop = do
     Just (knd, vars, ex2) -> Prop knd (unfoldAnd ex1) vars ex2
       where
         unfoldAnd = \case
-          Expr AN xs -> xs
+          AN xs -> xs
           x -> [x]
 
 lex, kw :: Parser a -> Parser a
