@@ -79,16 +79,37 @@ proofBlock = space >> choice
 
 exprCC :: Parser Expr
 exprCC = do
-  takeP (Just "functor") 2 >>= \case
+  count 2 letterChar >>= \case
     "NO" -> NO <$> exprCC
     "AN" -> AN <$> sepBy1 exprCC "+"
     "OR" -> OR <$> sepBy1 exprCC "|"
-    fn -> do
-      fn' <- readFn fn
-      args <- T.unpack <$> takeWhile1P (Just "args") Char.isAlpha
-      if length args == arity fn'
-         then pure $ Fun fn' args
-         else fail "number of arguments does not match functor arity"
+    fn -> readFnArgs letterChar fn
+
+exprHR :: Parser Expr
+exprHR = conjunction <?> "expression"
+  where
+    conjunction = sepBy1 disjunction (lex "/\\") >>= liftOne AN
+    disjunction = sepBy1 simpleExpr (lex "\\/") >>= liftOne OR
+    simpleExpr  = negation <|> brackets <|> functor
+    negation = NO <$> (lex "~" *> exprHR)
+    brackets = lex "(" *> exprHR <* lex ")"
+    functor = lex (count 2 letterChar) >>= readFnArgs (lex letterChar)
+
+    liftOne fn = \case
+      []  -> fail "impossible!"
+      [x] -> pure x
+      xs  -> pure $ fn xs
+
+readFnArgs :: Parser Char -> String -> Parser Expr
+readFnArgs p s = case reads s of
+  [(fn,"")] -> some p >>= \case
+    args | length args == arity fn
+      -> pure $ Fun fn args
+    _ -> fail
+      $ "expected " <> show (arity fn)
+      <> " arguments for functor " <> show fn
+  _ -> fail $ "invalid functor: " <>  show s
+
 
 
 prop' :: Parser Prop'
@@ -121,52 +142,8 @@ def' = do
   return (dName, dProp)
 
 
-exprHR :: Parser Expr
-exprHR = conjunction <?> "expression"
-  where
-    conjunction
-      = sepBy1 disjunction (lex "/\\")
-      >>= liftOne AN
-    disjunction
-      = sepBy1 simpleExpr (lex "\\/")
-      >>= liftOne OR
-
-    liftOne fn = \case
-      []  -> fail "impossible!"
-      [x] -> pure x
-      xs  -> pure $ fn xs
-
-    simpleExpr  = negation <|> brackets <|> functor'
-
-    negation
-      = NO <$> (lex "~" *> exprHR)
-
-    brackets
-      = lex "(" *> exprHR <* lex ")"
-
-    functor' = do
-      fn <- lex functor
-      some atom >>= \case
-        args | length args == arity fn
-          -> pure $ Fun fn args
-        _ -> fail
-          $ "expected " <> show (arity fn)
-          <> " arguments for functor " <> show fn
-
-functor :: Parser Fn
-functor = takeP (Just "functor") 2 >>= readFn
-
-readFn :: Text -> Parser Fn
-readFn fn =
-  case reads $ T.unpack fn of
-    [(x,"")] -> pure x
-    _ -> fail $ "invalid functor: " <>  show fn
-
-atom :: Parser Char
-atom = lex $ satisfy Char.isAlpha
-
 exVars :: Parser [Char]
-exVars = lex "?" *> some atom <* lex "." <?> "existential"
+exVars = lex "?" *> some (lex letterChar) <* lex "." <?> "existential"
 
 prop :: Parser Prop
 prop = do

@@ -22,7 +22,7 @@ spec = do
       parse exprCC "" "LTABCDEF"
         `shouldFailWith`
           errFancy 8 (fancy
-            $ ErrorFail "number of arguments does not match functor arity")
+            $ ErrorFail "expected 4 arguments for functor LT")
     it "parses AND functor" $
       "ANNEAB+NECD" `parsesTo` AN [Fun NE "AB", Fun NE "CD"]
     it "parses OR functor" $
@@ -40,7 +40,7 @@ spec = do
       parse exprCC "" "LTABCDEF"
         `shouldFailWith`
           errFancy 8 (fancy
-            $ ErrorFail "number of arguments does not match functor arity")
+            $ ErrorFail "expected 4 arguments for functor LT")
     it "parses AND functor" $
       "NEAB /\\ NECD" `parsesTo` AN [Fun NE "AB", Fun NE "CD"]
     it "parses OR functor" $
