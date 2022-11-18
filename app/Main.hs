@@ -1,35 +1,60 @@
 module Main (main) where
 
-import Control.Monad (forM_)
+import Control.Exception
+import Control.Monad.IO.Class
+import Control.Monad.Trans.State.Strict
+import Data.HashMap.Strict (HashMap)
+import Data.HashMap.Strict qualified as H
 import System.Environment (getArgs)
 import System.FilePath ((</>))
+
+import Types
 import Parser qualified
+
+data AnyErr = StringException String
+  deriving Show
+
+instance Exception AnyErr
 
 main :: IO ()
 main = getArgs >>= \case
   [proofDir] -> main' proofDir
+    `catch` (\(StringException e) -> putStrLn e)
   _ -> putStrLn "help!"
 
 main' :: FilePath -> IO ()
 main' proofDir = do
-  defs <- Parser.listOf' Parser.prop' (proofDir </> "Definitions.txt")
-    >>= either fail pure
+  defs <- tryX $ Parser.props $ proofDir </> "Definitions.txt"
+  props <- tryX $ Parser.props $ proofDir </> "Theorems.txt"
 
-  props <- Parser.listOf' Parser.prop' (proofDir </> "Theorems.txt")
-    >>= either fail pure
+  evalStateT
+    (mapM_ (checkProp proofDir) $ defs ++ props)
+    $ ProverState H.empty
 
-  print $ length defs
-  print $ length props
 
-  forM_ defs print
-  forM_ props print
+data ProverState = ProverState
+  { provedFacts :: HashMap PropName Prop
+  }
 
-  forM_ props $ \case
-    (name, prop, Just file) -> do
-      print (name, file)
-      print prop
-      proof <- Parser.listOf' Parser.proofBlock (proofDir </> file)
-        >>= either fail pure
-      mapM_ print proof
+checkProp :: FilePath -> PropWithInfo -> StateT ProverState IO ()
+checkProp proofDir (name, prop, proofFile) = do
+  facts <- gets provedFacts
+  whenJust proofFile $ \file -> do
+    liftIO $ print name
+    tryX
+      $ checkProof facts prop
+      <$> tryX (Parser.proof $ proofDir </> file)
+  modify (\s -> s {provedFacts = H.insert name prop facts})
 
-    _ -> return ()
+whenJust :: Monad m => Maybe a -> (a -> m ()) -> m ()
+whenJust = flip $ maybe (pure ())
+
+tryX :: MonadIO m => m (Either String b) -> m b
+tryX f =  f >>= either (liftIO . throwIO . StringException) pure
+
+
+checkProof :: HashMap PropName Prop -> Prop -> Proof -> Either String ()
+checkProof facts (Prop{..}) proof = proofLoop from proof
+  where
+    proofLoop _ [] = Right ()
+    proofLoop _ _ = Left "proof checker is not implemented"

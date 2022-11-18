@@ -41,7 +41,6 @@ ghc-options:
 library:
   source-dirs: src
   dependencies:
-  - containers
   - text
   - split
   - megaparsec
@@ -52,8 +51,10 @@ executables:
     source-dirs:         app
     dependencies:
     - euclid-proof-checker
+    - unordered-containers
     - filepath
     - text
+    - transformers
 
 tests:
   euclid-proof-checker-test:

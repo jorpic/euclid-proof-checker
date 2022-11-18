@@ -90,9 +90,12 @@ data Prop = Prop
   }
   deriving (Eq, Show)
 
+type PropName = S.Text
+type PropWithInfo = (PropName, Prop, Maybe FilePath)
+
 type Proof = [ProofBlock]
 data ProofBlock
-  = Infer Expr S.Text
+  = Infer Expr PropName
   | Reductio Expr Expr Proof
   | Cases Expr [(Expr, Proof)]
   deriving (Eq, Show)

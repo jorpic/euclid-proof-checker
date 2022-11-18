@@ -1,7 +1,8 @@
 module Parser
-  ( listOf'
-  , prop'
+  ( proof
+  , props
   , proofBlock
+  , propWithInfo
   , exprCC
   , exprHR
   )
@@ -9,9 +10,11 @@ module Parser
 
 import Prelude hiding (lex)
 import Control.Monad (void, forM, when)
+import Control.Monad.IO.Class
 import Data.Maybe (fromMaybe)
 import Data.Text qualified as TS
 import Data.Text.Lazy (Text)
+import Data.Text.Lazy qualified as T
 import Data.Text.Lazy.IO qualified as T
 import Data.Void (Void)
 import Text.Megaparsec hiding (Token)
@@ -19,21 +22,20 @@ import Text.Megaparsec.Char
 
 import Types
 
-
 type Parser a = Parsec Void Text a
 type Err = ParseErrorBundle Text Void
-type Prop' = (Text, Prop, Maybe FilePath)
 
-listOf' :: Parser a -> FilePath -> IO (Either String [a])
-listOf' p f
-  = prettifyErr . parse (many $ p <* space) f <$> T.readFile f
+proof :: MonadIO m => FilePath -> m (Either String Proof)
+proof = parseFile $ linesOf proofBlock
 
-prettifyErr :: Either Err a -> Either String a
-prettifyErr = either (Left . errorBundlePretty) Right
+props :: MonadIO m => FilePath -> m (Either String [PropWithInfo])
+props = parseFile $ linesOf propWithInfo
 
--- FIXME: expalin that we have two syntaxes for expressions
---  - concise one like this: ANEABAFFAC+IABACF
---  - and human readable like this: ~(LT C D A B) /\ NE A B /\ NE C D
+parseFile :: MonadIO m => Parser a -> FilePath -> m (Either String a)
+parseFile p f = prettyErr . parse p f <$> liftIO (T.readFile f)
+
+prettyErr :: Either Err a -> Either String a
+prettyErr = either (Left . errorBundlePretty) Right
 
 proofBlock :: Parser ProofBlock
 proofBlock = space >> choice
@@ -70,7 +72,9 @@ proofBlock = space >> choice
         (proofBlock <* ln) `manyTill_` (try $ lex exprCC <* kw "reductio")
       return $ Reductio ex conclusion proof
 
-
+-- FIXME: expalin that we have two syntaxes for expressions
+--  - concise one like this: ANEABAFFAC+IABACF
+--  - and human readable like this: ~(LT C D A B) /\ NE A B /\ NE C D
 
 exprCC :: Parser Expr
 exprCC = do
@@ -105,10 +109,8 @@ readFnArgs p s = case reads s of
       <> " arguments for functor " <> show fn
   _ -> fail $ "invalid functor: " <>  show s
 
-
-
-prop' :: Parser Prop'
-prop' = do
+propWithInfo :: Parser PropWithInfo
+propWithInfo = do
   pType <- choice
     [ "cn"          <* tab
     , "axiom"       <* tab
@@ -124,7 +126,7 @@ prop' = do
   pFile <- optional $ some printChar <* hspace
 
   return
-    ( pType <> ":" <> pName -- FIXME: T.toStrict
+    ( T.toStrict $ pType <> ":" <> pName
     , pProp
     , pFile
     )
@@ -148,6 +150,7 @@ prop = exprHR >>= \ex1 ->
       AN xs -> xs
       x -> [x]
 
+---- utility functions
 lex, kw :: Parser a -> Parser a
 lex p = p <* skipMany (hidden " ") -- FIXME: hspace?
 kw p = lex $ try $ p <* lookAhead (space1 <|> eof)

@@ -51,7 +51,7 @@ spec = do
           NO (OR [Fun NE "AB", Fun NE "CD"])
 
   describe "proposition" $ do
-    let parsesTo a b = parse prop' "" a `shouldParse` b
+    let parsesTo a b = parse propWithInfo "" a `shouldParse` b
     it "parses a proposition without file" $
       "lemma\txxx\t`EQ A B ==> ?X. EQ B X`\t"
         `parsesTo`
@@ -78,7 +78,7 @@ spec = do
           )
 
   describe "definition" $ do
-    let parsesTo a b = parse prop' "" a `shouldParse` b
+    let parsesTo a b = parse propWithInfo "" a `shouldParse` b
     it "parses simple definition" $
       "unequal\t`NE A B <=> ~(EQ A B)`"
         `parsesTo`

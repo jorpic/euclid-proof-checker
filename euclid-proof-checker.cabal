@@ -39,7 +39,6 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
-    , containers
     , megaparsec
     , split
     , text
@@ -62,6 +61,8 @@ executable euclid-proof-checker
     , euclid-proof-checker
     , filepath
     , text
+    , transformers
+    , unordered-containers
   default-language: Haskell2010
 
 test-suite euclid-proof-checker-test
