@@ -12,7 +12,7 @@ import Types hiding (ex)
 import Parser
 
 
-spec :: SpecWith ()
+spec :: Spec
 spec = do
   describe "exprCC" $ do
     let parsesTo a b = parse exprCC "" a `shouldParse` b

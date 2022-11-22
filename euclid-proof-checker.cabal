@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.35.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       Parser
+      ProofChecker
       Types
   other-modules:
       Paths_euclid_proof_checker
@@ -39,8 +40,8 @@ library
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+    , containers
     , megaparsec
-    , split
     , text
   default-language: Haskell2010
 
@@ -58,11 +59,11 @@ executable euclid-proof-checker
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+    , containers
     , euclid-proof-checker
     , filepath
     , text
     , transformers
-    , unordered-containers
   default-language: Haskell2010
 
 test-suite euclid-proof-checker-test
@@ -70,6 +71,7 @@ test-suite euclid-proof-checker-test
   main-is: Spec.hs
   other-modules:
       ParserSpec
+      ProofCheckerSpec
       Paths_euclid_proof_checker
   hs-source-dirs:
       test
@@ -81,6 +83,7 @@ test-suite euclid-proof-checker-test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+    , containers
     , euclid-proof-checker
     , hspec
     , hspec-megaparsec

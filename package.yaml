@@ -42,8 +42,8 @@ library:
   source-dirs: src
   dependencies:
   - text
-  - split
   - megaparsec
+  - containers
 
 executables:
   euclid-proof-checker:
@@ -51,7 +51,7 @@ executables:
     source-dirs:         app
     dependencies:
     - euclid-proof-checker
-    - unordered-containers
+    - containers
     - filepath
     - text
     - transformers
@@ -62,6 +62,7 @@ tests:
     source-dirs:         test
     dependencies:
     - euclid-proof-checker
+    - containers
     - hspec
     - hspec-megaparsec
     - megaparsec
