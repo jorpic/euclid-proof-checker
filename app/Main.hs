@@ -9,7 +9,7 @@ import System.FilePath ((</>))
 
 import Types
 import Parser qualified
-import ProofChecker
+import ProofChecker (Facts, checkProof)
 
 data AnyErr = StringException String
   deriving Show
