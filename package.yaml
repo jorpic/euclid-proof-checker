@@ -54,7 +54,6 @@ executables:
     - containers
     - filepath
     - text
-    - transformers
 
 tests:
   euclid-proof-checker-test:

@@ -8,7 +8,7 @@ import Test.Hspec.Megaparsec
 import Text.Megaparsec (parse, ErrorFancy(ErrorFail))
 import NeatInterpolation (text)
 
-import Types hiding (ex)
+import Types
 import Parser
 
 

@@ -1,11 +1,11 @@
+{-# LANGUAGE TemplateHaskell #-}
 module ProofChecker
   ( Facts
+  , ProofContext(..)
   , checkProof
-  , checkProp
   , rewriteAs
   , mergeVars
   ) where
-
 
 import Control.Monad (foldM, zipWithM, (>=>))
 import Data.Either (rights)
@@ -18,47 +18,92 @@ import Data.Set qualified as Set
 import Types
 
 type Facts = Map PropName Prop
-type Objs = Set Char
 type VarMap = Map Char Char
 
+-- | Check a proof of a proposition.
+-- The proof can reference some of already proved facts.
+-- Returns error if proof is not valid.
 checkProof :: Facts -> Prop -> Proof -> Either String ()
-checkProof facts (Prop{..}) proof = proofLoop from proof
- -- get objects from antecendent
- -- proofLoop
- -- unify with conclusion and check existentials
+checkProof facts (Prop{..}) proof = do
+  -- Iterate over the proof blocks checking each in the context containing
+  -- already proved intermediate expressions.
+  let foldProofBlocks cxt chkBlk = foldM chkBlk cxt proof
+
+  -- Initial context contains expressions from antecedent.
+  let startCxt = foldr addToContext emptyContext antecedent
+
+  finalCxt <- foldProofBlocks startCxt $ \cxt block -> do
+    provedExpr <- checkBlock facts cxt block
+    pure $ provedExpr `addToContext` cxt -- Extend the context.
+
+  -- The last proved expression should be equal to the consequent.
+  case provedExprs finalCxt of
+    lastProvedExpr : _
+      | lastProvedExpr == consequent -> pure () -- Success!
+      | otherwise -> Left "Proof does not match prop's consequent"
+    [] -> Left "No proved expressions! The proof was empty?"
+
+
+data ProofContext = ProofContext
+  { knownObjects :: Set Char
+  , provedExprs :: [Expr]
+  }
+emptyContext :: ProofContext
+emptyContext = ProofContext Set.empty []
+
+addToContext :: Expr -> ProofContext -> ProofContext
+addToContext e c = c
+  { knownObjects = getObjects e <> knownObjects c
+  , provedExprs = e : provedExprs c
+  }
   where
-    proofLoop cxt = \case
-      [] -> Left "proof is empty"
-      _ -> Left "proof checker is not implemented"
+    getObjects = foldMap Set.singleton -- Get objects from an expression.
 
 
--- Some properties contain existential quantification in the consequent, that
--- means that new objects should be created and added to the set of known
--- objects.
-checkBlock :: Facts -> Objs -> [Expr] -> ProofBlock -> Either String ()
-checkBlock facts objs cxt = \case
+checkBlock :: Facts -> ProofContext -> ProofBlock -> Either String Expr
+checkBlock facts cxt@(ProofContext{..}) = \case
+  -- Search the exact expr in the context.
   Infer expr ""
-    | expr `elem` cxt -> Right ()
+    | expr `elem` provedExprs -> pure expr
     | otherwise -> Left "can't infer expression from the context"
-    -- search the exact expr in the context
+
+  -- Search the referenced proposition among facts and try to satisfy it from
+  -- the context.
   Infer expr ref -> case Map.lookup ref facts of
-    Nothing -> Left "can't find referenced statement"
-    Just prop -> do
-      varMap <- checkProp cxt expr prop
-      let freeVars = ex prop
-      let freeVars' = catMaybes $ map (`Map.lookup` varMap) freeVars -- why `catMaybes` is ok?
-      case filter (`Set.member` objs) freeVars' of
-        [] -> pure ()
-        vs -> Left $ "conflicting free variables" ++ show vs
+    Nothing -> Left "can't find the referenced statement"
+    Just prop -> inferWithProp cxt prop expr
+
+  -- Reductio Expr Expr Proof
+  -- Cases Expr [(Expr, Proof)]
   _ -> Left "not implemented yet"
 
 
-checkProp :: [Expr] -> Expr -> Prop -> Either String VarMap
-checkProp cxt tgt (Prop{..}) = do
-  vMap <- to `rewriteAs` tgt
-  case foldM (searchEx cxt) vMap from of -- list monad inside foldM
+inferWithProp :: ProofContext -> Prop -> Expr -> Either String Expr
+inferWithProp ProofContext{..} Prop{..} expr = do
+  -- Variable mapping that unifies 'consequent' with the expression to be
+  -- proved.
+  varMap <- consequent `rewriteAs` expr
+
+  -- For each expression in 'antecedent', find an expression in the context
+  -- such that both can be unified by a variable mapping.
+  -- All those mappings must be compatible with each other and with 'varMap'.
+  let possibleMappings = foldM (searchEx provedExprs) varMap antecedent
+  -- ^ List monad is used to search repeatedly and backtrack in case of conflict.
+  extendedVarMap <- case possibleMappings of
     vm : _ -> pure vm
-    [] -> Left "can't prove prop from context"
+    [] -> Left "can't prove prop from the context"
+
+  -- New objects may be introduced by the proposition.
+  -- Rename them according to 'extendedVarMap'.
+  let newObjects = catMaybes $ map (`Map.lookup` extendedVarMap) existentialVars
+  -- ^ 'catMaybes' is fine here because 'Nothing' occurs only if there is
+  -- some variable that is mentioned in 'existentialVars' but not used in
+  -- the antecedent.
+
+  if any (`Set.member` knownObjects) newObjects
+    then Left $ "Some of the new objects clash with known ones: "
+      ++ show newObjects
+    else pure consequent
 
 
 -- In the provided context search all expressions that can be matched to `ex` without

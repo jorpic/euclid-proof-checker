@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFoldable #-}
 module Types where
 
 import Prelude hiding (Ordering(..))
@@ -73,20 +74,21 @@ arity = \case
 
 -- Expression mixes logical functors like NO, AN, OR, and geometrical
 -- relations (all other functors).
-data Expr
-  = AN [Expr]
+type Expr = Expr' Char
+data Expr' var
+  = AN [Expr] -- FIXME: use NonEmpty lists here and below?
   | OR [Expr]
   | NO Expr
-  | Fun Fn [Char]
-  deriving (Show, Eq, Ord)
+  | Fun Fn [var]
+  deriving (Show, Eq, Ord, Foldable)
 
 
 -- Proposition is either implication or equivalence.
 data Prop = Prop
-  { from :: [Expr]   -- antecedent = conjunction of expressions
-                     --   (can be empty, e.g. `EQ A A`)
-  , ex   :: [Char]   -- existential variables
-  , to   :: Expr     -- consequent
+  { antecedent :: [Expr]
+    -- ^ conjunction of expressions (can be empty, e.g. `EQ A A`)
+  , existentialVars :: [Char]
+  , consequent :: Expr
   }
   deriving (Eq, Show)
 

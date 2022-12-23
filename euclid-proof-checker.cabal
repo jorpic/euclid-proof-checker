@@ -63,7 +63,6 @@ executable euclid-proof-checker
     , euclid-proof-checker
     , filepath
     , text
-    , transformers
   default-language: Haskell2010
 
 test-suite euclid-proof-checker-test
