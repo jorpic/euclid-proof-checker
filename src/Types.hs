@@ -95,9 +95,9 @@ data Prop = Prop
 type PropName = S.Text
 type PropWithInfo = (PropName, Prop, Maybe FilePath)
 
-type Proof = [ProofBlock]
+type Proof = [ProofBlock] -- FIXME: NonEmpty?
 data ProofBlock
   = Infer Expr PropName
-  | Reductio Expr Expr Proof
+  | Reductio Expr Expr Proof -- assumption, conclusion, proof
   | Cases Expr [(Expr, Proof)]
   deriving (Eq, Show)

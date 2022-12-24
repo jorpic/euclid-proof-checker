@@ -7,6 +7,7 @@ module ProofChecker
   , mergeVars
   ) where
 
+import Prelude hiding (Ordering(..))
 import Control.Monad (foldM, zipWithM, (>=>))
 import Data.Either (rights)
 import Data.Map.Strict (Map)
@@ -61,10 +62,10 @@ addToContext e c = c
 
 
 checkBlock :: Facts -> ProofContext -> ProofBlock -> Either String Expr
-checkBlock facts cxt@(ProofContext{..}) = \case
+checkBlock facts cxt = \case
   -- Search the exact expr in the context.
   Infer expr ""
-    | expr `elem` provedExprs -> pure expr
+    | expr `elem` provedExprs cxt -> pure expr
     | otherwise -> Left "can't infer expression from the context"
 
   -- Search the referenced proposition among facts and try to satisfy it from
@@ -73,7 +74,20 @@ checkBlock facts cxt@(ProofContext{..}) = \case
     Nothing -> Left "can't find the referenced statement"
     Just prop -> inferWithProp cxt prop expr
 
-  -- Reductio Expr Expr Proof
+  Reductio assumption conclusion proof -> do
+    let foldProofBlocks cx chkBlk = foldM chkBlk cx proof
+    finalCxt <- foldProofBlocks (assumption `addToContext` cxt) $ \cxt' block -> do
+      provedExpr <- checkBlock facts cxt' block
+      pure $ provedExpr `addToContext` cxt' -- Extend the context.
+    case provedExprs finalCxt of
+      lastProvedExpr : cxt'
+        -- last expression in context contradicts something in context
+        | any (negated lastProvedExpr ==) cxt' -> pure conclusion -- Success!
+        | otherwise -> Left "no contradiction found"
+      [] -> Left "No proved expressions! The reductio was empty?"
+
+    -- 1. check that the assumption equals the conclusion negated
+
   -- Cases Expr [(Expr, Proof)]
   _ -> Left "not implemented yet"
 
@@ -112,6 +126,19 @@ searchEx :: [Expr] -> VarMap -> Expr -> [VarMap]
 searchEx cxt vm ex
   = rights
   $ map ((ex `rewriteAs`) >=> mergeVars vm) cxt
+
+
+-- | Returns negated version of an expression.
+negated :: Expr -> Expr
+negated = \case
+  AN exprs -> OR $ map negated exprs
+  OR exprs -> AN $ map negated exprs
+  NO expr -> expr
+  Fun EQ xs -> Fun NE xs
+  Fun NE xs -> Fun EQ xs
+  Fun CO xs -> Fun NC xs
+  Fun NC xs -> Fun CO xs
+  expr -> NO expr
 
 
 -- Get a varables to variables mapping that converts from ex1 to ex2.
