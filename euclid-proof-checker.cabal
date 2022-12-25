@@ -28,6 +28,7 @@ library
       Parser
       ProofChecker
       Types
+      Utils
   other-modules:
       Paths_euclid_proof_checker
   hs-source-dirs:
@@ -37,6 +38,10 @@ library
       LambdaCase
       OverloadedStrings
       RecordWildCards
+      DeriveAnyClass
+      DeriveFoldable
+      DeriveFunctor
+      DeriveTraversable
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
@@ -56,6 +61,10 @@ executable euclid-proof-checker
       LambdaCase
       OverloadedStrings
       RecordWildCards
+      DeriveAnyClass
+      DeriveFoldable
+      DeriveFunctor
+      DeriveTraversable
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
@@ -79,6 +88,10 @@ test-suite euclid-proof-checker-test
       LambdaCase
       OverloadedStrings
       RecordWildCards
+      DeriveAnyClass
+      DeriveFoldable
+      DeriveFunctor
+      DeriveTraversable
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5

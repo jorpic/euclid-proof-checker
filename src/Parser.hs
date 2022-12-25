@@ -9,6 +9,7 @@ module Parser
   where
 
 import Prelude hiding (lex)
+import Control.Exception (Exception)
 import Control.Monad (void, forM, when)
 import Control.Monad.IO.Class
 import Data.Maybe (fromMaybe)
@@ -21,21 +22,25 @@ import Text.Megaparsec hiding (Token)
 import Text.Megaparsec.Char
 
 import Types
+import Utils (mapLeft)
 
 type Parser a = Parsec Void Text a
 type Err = ParseErrorBundle Text Void
 
-proof :: MonadIO m => FilePath -> m (Either String Proof)
+newtype ParserErr = ParserErr Err
+  deriving Exception
+
+instance Show ParserErr where
+  show (ParserErr e) = errorBundlePretty e
+
+proof :: MonadIO m => FilePath -> m (Either ParserErr Proof)
 proof = parseFile $ linesOf proofBlock
 
-props :: MonadIO m => FilePath -> m (Either String [PropWithInfo])
+props :: MonadIO m => FilePath -> m (Either ParserErr [PropWithInfo])
 props = parseFile $ linesOf propWithInfo
 
-parseFile :: MonadIO m => Parser a -> FilePath -> m (Either String a)
-parseFile p f = prettyErr . parse p f <$> liftIO (T.readFile f)
-
-prettyErr :: Either Err a -> Either String a
-prettyErr = either (Left . errorBundlePretty) Right
+parseFile :: MonadIO m => Parser a -> FilePath -> m (Either ParserErr a)
+parseFile p f = mapLeft ParserErr . parse p f <$> liftIO (T.readFile f)
 
 proofBlock :: Parser ProofBlock
 proofBlock = space >> choice

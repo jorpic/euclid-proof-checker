@@ -10,18 +10,10 @@ import System.FilePath ((</>))
 import Parser qualified
 import ProofChecker (checkProof)
 
-
-data AnyErr = StringException String
-  deriving Show
-
-instance Exception AnyErr
-
 main :: IO ()
 main = getArgs >>= \case
   [proofDir] -> main' proofDir
-    `catch` (\(StringException e) -> putStrLn e)
   _ -> putStrLn "help!"
-
 
 main' :: FilePath -> IO ()
 main' proofDir = do
@@ -33,12 +25,15 @@ main' proofDir = do
     whenJust proofFile $ \file -> do
       liftIO $ print name
       proof <- tryX $ Parser.proof $ proofDir </> file
-      tryX $ pure $ checkProof facts prop proof
+      liftEither $ checkProof facts prop proof
     pure $ Map.insert name prop facts
 
 whenJust :: Monad m => Maybe a -> (a -> m ()) -> m ()
 whenJust = flip $ maybe (pure ())
 
 -- | convert Left into throwIO
-tryX :: MonadIO m => m (Either String b) -> m b
-tryX f =  f >>= either (liftIO . throwIO . StringException) pure
+tryX :: (Exception e, MonadIO m) => m (Either e b) -> m b
+tryX f =  f >>= liftEither
+
+liftEither :: (Exception e, MonadIO m) => Either e a -> m a
+liftEither = either (liftIO . throwIO) pure

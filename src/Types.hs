@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveFoldable #-}
 module Types where
 
 import Prelude hiding (Ordering(..))
@@ -76,11 +75,11 @@ arity = \case
 -- relations (all other functors).
 type Expr = Expr' Char
 data Expr' var
-  = AN [Expr] -- FIXME: use NonEmpty lists here and below?
-  | OR [Expr]
-  | NO Expr
+  = AN [Expr' var] -- FIXME: use NonEmpty lists here and below?
+  | OR [Expr' var]
+  | NO (Expr' var)
   | Fun Fn [var]
-  deriving (Show, Eq, Ord, Foldable)
+  deriving (Show, Eq, Ord, Foldable, Functor, Traversable)
 
 
 -- Proposition is either implication or equivalence.
