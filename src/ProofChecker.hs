@@ -122,7 +122,7 @@ checkBlock facts cxt blk
     -- the context.
     Infer expr ref -> case Map.lookup ref facts of
       Nothing -> throwStr "can't find the referenced statement"
-      Just prop -> withErrContext ("with ref" ++ show prop)
+      Just prop -> withErrContext ("with prop " ++ show prop)
         $ inferWithProp cxt prop expr
 
     Reductio assumption conclusion proof -> do

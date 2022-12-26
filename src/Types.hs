@@ -79,7 +79,14 @@ data Expr' var
   | OR [Expr' var]
   | NO (Expr' var)
   | Fun Fn [var]
-  deriving (Show, Eq, Ord, Foldable, Functor, Traversable)
+  deriving (Eq, Ord, Foldable, Functor, Traversable)
+
+instance Show (Expr' Char) where
+  show = \case
+    AN ex -> "AN" ++ show ex
+    OR ex -> "AN" ++ show ex
+    NO ex -> "NO" ++ show ex
+    Fun fn vars -> show fn ++ vars
 
 
 -- Proposition is either implication or equivalence.
@@ -89,7 +96,14 @@ data Prop = Prop
   , existentialVars :: [Char]
   , consequent :: Expr
   }
-  deriving (Eq, Show)
+
+instance Show Prop where
+  show Prop{..} = unwords
+    [ show antecedent
+    , "==>"
+    , if null existentialVars then "" else "∃" ++ existentialVars ++ "."
+    , show consequent
+    ]
 
 type PropName = S.Text
 type PropWithInfo = (PropName, Prop, Maybe FilePath)
