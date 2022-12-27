@@ -74,6 +74,11 @@ arity = \case
 -- Expression mixes logical functors like NO, AN, OR, and geometrical
 -- relations (all other functors).
 type Expr = Expr' Char
+-- FIXME: Expression syntax used in the paper does not allow nested AND
+-- expressions:
+--  ANEQab+EQcd+OREQxy|ANEQyz+EQxz
+--    => a=b & c=d & (x=y | y=z) & x=z
+-- maybe we can use this to simplify the parser?
 data Expr' var
   = AN [Expr' var] -- FIXME: use NonEmpty lists here and below?
   | OR [Expr' var]
@@ -87,6 +92,19 @@ instance Show (Expr' Char) where
     OR ex -> "AN" ++ show ex
     NO ex -> "NO" ++ show ex
     Fun fn vars -> show fn ++ vars
+
+-- | Returns negated version of an expression.
+negated :: Expr -> Expr
+negated = \case
+  AN exprs -> OR $ map negated exprs
+  OR exprs -> AN $ map negated exprs
+  NO expr -> expr
+  Fun EQ xs -> Fun NE xs
+  Fun NE xs -> Fun EQ xs
+  Fun CO xs -> Fun NC xs
+  Fun NC xs -> Fun CO xs
+  expr -> NO expr
+
 
 
 -- Proposition is either implication or equivalence.
@@ -113,4 +131,9 @@ data ProofBlock
   = Infer Expr PropName
   | Reductio Expr Expr Proof -- assumption, conclusion, proof
   | Cases Expr [(Expr, Proof)]
-  deriving (Eq, Show)
+
+instance Show ProofBlock where
+  show = \case
+    Infer expr _      -> "infer " ++ show expr
+    Reductio _ expr _ -> "reductio " ++ show expr
+    Cases expr _      -> "case " ++ show expr

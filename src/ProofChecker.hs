@@ -9,7 +9,7 @@ module ProofChecker
 
 import Prelude hiding (Ordering(..))
 import Control.Exception
-import Control.Monad (foldM, zipWithM, (>=>))
+import Control.Monad (foldM, zipWithM, (>=>), when)
 import Data.Either (rights)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -50,24 +50,16 @@ withErrContext = mapLeft . ErrContext
 checkProof :: Facts -> Prop -> Proof -> Result ()
 checkProof facts p@(Prop{..}) proof
   = withErrContext ("when proving " ++ show p) $ do
-    -- Iterate over the proof blocks checking each in the context containing
-    -- already proved intermediate expressions.
-    let foldProofBlocks cxt chkBlk = foldM chkBlk cxt proof
-
-    -- Initial context contains expressions from antecedent.
+    -- Initial context contains expressions from the antecedent.
     let startCxt = foldr addToContext emptyContext antecedent
 
-    finalCxt <- foldProofBlocks startCxt $ \cxt block -> do
-      provedExpr <- checkBlock facts cxt block
-      pure $ provedExpr `addToContext` cxt -- Extend the context.
-
-    -- The last proved expression should be equal to the consequent.
+    finalCxt <- checkAllBlocks facts startCxt proof
     case provedExprs finalCxt of
       lastProvedExpr : _
+        -- The last proved expression should be equal to the consequent.
         | lastProvedExpr == consequent -> pure () -- Success!
         | otherwise -> throwStr "Proof does not match prop's consequent"
       [] -> throwStr "No proved expressions! The proof was empty?"
-
 
 data ProofContext = ProofContext
   { knownObjects :: Set Char
@@ -84,17 +76,17 @@ addToContext e c = c
   where
     getObjects = foldMap Set.singleton -- Get objects from an expression.
 
-blockSummary :: ProofBlock -> String
-blockSummary = \case
-  Infer expr _      -> "infer " ++ show expr
-  Reductio _ expr _ -> "reductio " ++ show expr
-  Cases expr _      -> "case " ++ show expr
 
 checkBlock :: Facts -> ProofContext -> ProofBlock -> Result Expr
 checkBlock facts cxt blk
-  = withErrContext (blockSummary blk)
+  = withErrContext (show blk)
   $ case blk of
+    Infer conj@(AN exprs) ""
+      | all (`elem` provedExprs cxt) exprs -> pure conj
+      | otherwise -> throwStr "can't infer conjunction from the context"
+
     -- Search the exact expr in the context.
+    -- FIXME: unify with 'Infer AN'
     Infer expr ""
       | expr `elem` provedExprs cxt -> pure expr
       | otherwise -> throwStr "can't infer expression from the context"
@@ -126,14 +118,14 @@ checkBlock facts cxt blk
         $ inferWithProp cxt prop expr
 
     Reductio assumption conclusion proof -> do
-      -- FIXME: check that the assumption equals the conclusion negated
-      let foldProofBlocks cx chkBlk = foldM chkBlk cx proof
-      finalCxt <- foldProofBlocks (assumption `addToContext` cxt) $ \cxt' block -> do
-        provedExpr <- checkBlock facts cxt' block
-        pure $ provedExpr `addToContext` cxt' -- Extend the context.
+      when (assumption /= negated conclusion)
+        $ throwStr "Assumption and conclusion must be negative of each other"
+
+      let startCxt = assumption `addToContext` cxt
+      finalCxt <- checkAllBlocks facts startCxt proof
       case provedExprs finalCxt of
         lastProvedExpr : cxt'
-          -- last expression in context contradicts something in context
+          -- The last expression in the context must contradict something.
           | any (negated lastProvedExpr ==) cxt' -> pure conclusion -- Success!
           | otherwise -> withErrContext ("lastProvedExpr " ++ show lastProvedExpr)
             $ throwStr "No contradiction found"
@@ -171,6 +163,16 @@ inferWithProp ProofContext{..} Prop{..} expr = do
     else rename extendedVarMap consequent
 
 
+-- Iterate over proof blocks checking each with the context containing
+-- already proved intermediate expressions.
+checkAllBlocks :: Facts -> ProofContext -> [ProofBlock] -> Result ProofContext
+checkAllBlocks facts startCxt blocks = do
+    -- Iterate over proof blocks and update the context along the way.
+    let foldProofBlocks cxt chkBlk = foldM chkBlk cxt blocks
+    foldProofBlocks startCxt $ \cxt block -> do
+      provedExpr <- checkBlock facts cxt block
+      pure $ provedExpr `addToContext` cxt -- Extend the context.
+
 rename :: VarMap -> Expr -> Result Expr
 rename varMap expr = case traverse (`Map.lookup` varMap) expr of
   Just expr' -> pure expr'
@@ -185,17 +187,8 @@ searchEx cxt vm ex
   $ map ((ex `rewriteAs`) >=> mergeVars vm) cxt
 
 
--- | Returns negated version of an expression.
-negated :: Expr -> Expr
-negated = \case
-  AN exprs -> OR $ map negated exprs
-  OR exprs -> AN $ map negated exprs
-  NO expr -> expr
-  Fun EQ xs -> Fun NE xs
-  Fun NE xs -> Fun EQ xs
-  Fun CO xs -> Fun NC xs
-  Fun NC xs -> Fun CO xs
-  expr -> NO expr
+-- findMatching :: [Expr] -> Expr -> [(Expr, VarMap)]
+-- dropConflictingTo :: VarMap -> [(Expr, VarMap)] -> [(Expr, VarMap)]
 
 
 -- Get a varables to variables mapping that converts from ex1 to ex2.
