@@ -1,7 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 module ProofChecker
   ( Facts
-  , ProofContext(..)
   , checkProof
   , rewriteAs
   , mergeVars
@@ -14,7 +13,6 @@ import Data.Either (rights)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes)
-import Data.Set (Set)
 import Data.Set qualified as Set
 
 import Types
@@ -51,44 +49,27 @@ checkProof :: Facts -> Prop -> Proof -> Result ()
 checkProof facts p@(Prop{..}) proof
   = withErrContext ("when proving " ++ show p) $ do
     -- Initial context contains expressions from the antecedent.
-    let startCxt = foldr addToContext emptyContext antecedent
-
-    finalCxt <- checkAllBlocks facts startCxt proof
-    case provedExprs finalCxt of
+    provedExprs <- checkAllBlocks facts antecedent proof
+    case provedExprs of
       lastProvedExpr : _
         -- The last proved expression should be equal to the consequent.
         | lastProvedExpr == consequent -> pure () -- Success!
         | otherwise -> throwStr "Proof does not match prop's consequent"
       [] -> throwStr "No proved expressions! The proof was empty?"
 
-data ProofContext = ProofContext
-  { knownObjects :: Set Char
-  , provedExprs :: [Expr]
-  }
-emptyContext :: ProofContext
-emptyContext = ProofContext Set.empty []
 
-addToContext :: Expr -> ProofContext -> ProofContext
-addToContext e c = c
-  { knownObjects = getObjects e <> knownObjects c
-  , provedExprs = e : provedExprs c
-  }
-  where
-    getObjects = foldMap Set.singleton -- Get objects from an expression.
-
-
-checkBlock :: Facts -> ProofContext -> ProofBlock -> Result Expr
-checkBlock facts cxt blk
+checkBlock :: Facts -> [Expr] -> ProofBlock -> Result Expr
+checkBlock facts provedExprs blk
   = withErrContext (show blk)
   $ case blk of
     Infer conj@(AN exprs) ""
-      | all (`elem` provedExprs cxt) exprs -> pure conj
+      | all (`elem` provedExprs) exprs -> pure conj
       | otherwise -> throwStr "can't infer conjunction from the context"
 
     -- Search the exact expr in the context.
     -- FIXME: unify with 'Infer AN'
     Infer expr ""
-      | expr `elem` provedExprs cxt -> pure expr
+      | expr `elem` provedExprs -> pure expr
       | otherwise -> throwStr "can't infer expression from the context"
 
     -- This is a meta-axiom. It searches EQ in context and tries to
@@ -96,18 +77,18 @@ checkBlock facts cxt blk
     Infer expr "cn:equalitysub" -> do
       let equalities = concatMap
             (\case { Fun EQ [a,b] -> [(a,b), (b,a)] ; _ -> [] })
-            (provedExprs cxt)
+            provedExprs
       let canBeRewrittenWithEqualities expr' =
             case expr' `rewriteAs` expr of
               Right vm ->
                 all (`elem` equalities)
                   $ Map.toList $ Map.filterWithKey (/=) vm
               _ -> False
-      if any canBeRewrittenWithEqualities $ provedExprs cxt
+      if any canBeRewrittenWithEqualities provedExprs
         then pure expr
         else withErrContext
           ("equalities found " ++ show equalities)
-          $ withErrContext ("provedExprs " ++ show (provedExprs cxt))
+          $ withErrContext ("provedExprs " ++ show provedExprs)
           $ throwStr "Can't find how to rewrite with equalities"
 
     -- Search the referenced proposition among facts and try to satisfy it from
@@ -115,15 +96,15 @@ checkBlock facts cxt blk
     Infer expr ref -> case Map.lookup ref facts of
       Nothing -> throwStr "can't find the referenced statement"
       Just prop -> withErrContext ("with prop " ++ show prop)
-        $ inferWithProp cxt prop expr
+        $ inferWithProp provedExprs prop expr
 
     Reductio assumption conclusion proof -> do
       when (assumption /= negated conclusion)
         $ throwStr "Assumption and conclusion must be negative of each other"
 
-      let startCxt = assumption `addToContext` cxt
-      finalCxt <- checkAllBlocks facts startCxt proof
-      case provedExprs finalCxt of
+      let startCxt = assumption : provedExprs
+      provedExprs' <- checkAllBlocks facts startCxt proof
+      case provedExprs' of
         lastProvedExpr : cxt'
           -- The last expression in the context must contradict something.
           | any (negated lastProvedExpr ==) cxt' -> pure conclusion -- Success!
@@ -134,8 +115,8 @@ checkBlock facts cxt blk
     -- Cases Expr [(Expr, Proof)]
     _ -> throwStr "not implemented yet"
 
-inferWithProp :: ProofContext -> Prop -> Expr -> Result Expr
-inferWithProp ProofContext{..} Prop{..} expr = do
+inferWithProp :: [Expr] -> Prop -> Expr -> Result Expr
+inferWithProp provedExprs Prop{..} expr = do
   -- Variable mapping that unifies 'consequent' with the expression to be
   -- proved.
   varMap <- consequent `rewriteAs` expr
@@ -157,6 +138,8 @@ inferWithProp ProofContext{..} Prop{..} expr = do
   -- some variable that is mentioned in 'existentialVars' but not used in
   -- the antecedent.
 
+  let getExprObjects = foldMap Set.singleton
+  let knownObjects = foldMap getExprObjects provedExprs
   if any (`Set.member` knownObjects) newObjects
     then throwStr $ "Some of the new objects clash with known ones: "
       ++ show newObjects
@@ -165,13 +148,13 @@ inferWithProp ProofContext{..} Prop{..} expr = do
 
 -- Iterate over proof blocks checking each with the context containing
 -- already proved intermediate expressions.
-checkAllBlocks :: Facts -> ProofContext -> [ProofBlock] -> Result ProofContext
+checkAllBlocks :: Facts -> [Expr] -> [ProofBlock] -> Result [Expr]
 checkAllBlocks facts startCxt blocks = do
     -- Iterate over proof blocks and update the context along the way.
     let foldProofBlocks cxt chkBlk = foldM chkBlk cxt blocks
     foldProofBlocks startCxt $ \cxt block -> do
       provedExpr <- checkBlock facts cxt block
-      pure $ provedExpr `addToContext` cxt -- Extend the context.
+      pure $ provedExpr : cxt -- Extend the context.
 
 rename :: VarMap -> Expr -> Result Expr
 rename varMap expr = case traverse (`Map.lookup` varMap) expr of
