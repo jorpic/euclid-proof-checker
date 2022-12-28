@@ -105,7 +105,10 @@ negated = \case
   Fun NC xs -> Fun CO xs
   expr -> NO expr
 
-
+conjuncts :: Expr -> [Expr]
+conjuncts = \case
+  AN ex -> ex
+  ex -> [ex]
 
 -- Proposition is either implication or equivalence.
 data Prop = Prop
@@ -114,6 +117,7 @@ data Prop = Prop
   , existentialVars :: [Char]
   , consequent :: Expr
   }
+  deriving Eq
 
 instance Show Prop where
   show Prop{..} = unwords
@@ -131,6 +135,7 @@ data ProofBlock
   = Infer Expr PropName
   | Reductio Expr Expr Proof -- assumption, conclusion, proof
   | Cases Expr [(Expr, Proof)]
+  deriving Eq
 
 instance Show ProofBlock where
   show = \case

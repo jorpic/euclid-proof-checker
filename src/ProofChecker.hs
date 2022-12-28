@@ -62,14 +62,10 @@ checkBlock :: Facts -> [Expr] -> ProofBlock -> Result Expr
 checkBlock facts provedExprs blk
   = withErrContext (show blk)
   $ case blk of
-    Infer conj@(AN exprs) ""
-      | all (`elem` provedExprs) exprs -> pure conj
-      | otherwise -> throwStr "can't infer conjunction from the context"
-
     -- Search the exact expr in the context.
-    -- FIXME: unify with 'Infer AN'
     Infer expr ""
-      | expr `elem` provedExprs -> pure expr
+      -- If expr is an AN we search for each conjunct among proved exprs.
+      | all (`elem` provedExprs) $ conjuncts expr -> pure expr
       | otherwise -> throwStr "can't infer expression from the context"
 
     -- This is a meta-axiom. It searches EQ in context and tries to
@@ -96,7 +92,18 @@ checkBlock facts provedExprs blk
     Infer expr ref -> case Map.lookup ref facts of
       Nothing -> throwStr "can't find the referenced statement"
       Just prop -> withErrContext ("with prop " ++ show prop)
-        $ inferWithProp provedExprs prop expr
+      -- If prop's consequent is a conjunction we should try
+      -- to match expr with each conjunct.
+        $ do
+          let matches =
+                [inferWithProp provedExprs p expr
+                | e <- conjuncts $ consequent prop
+                , let p = prop {consequent = e}
+                ]
+          case rights matches of
+            ex : _ -> pure ex
+            -- try to match the whole consequent with expr
+            [] -> inferWithProp provedExprs prop expr
 
     Reductio assumption conclusion proof -> do
       when (assumption /= negated conclusion)
@@ -154,7 +161,11 @@ checkAllBlocks facts startCxt blocks = do
     let foldProofBlocks cxt chkBlk = foldM chkBlk cxt blocks
     foldProofBlocks startCxt $ \cxt block -> do
       provedExpr <- checkBlock facts cxt block
-      pure $ provedExpr : cxt -- Extend the context.
+      -- If provedExpr is a conjunction we add also all its conjuncts
+      -- separately. E.g. proving BEACE in 3.7.a.prf:
+      --    ANBEACE+EECECD  postulate:extension
+      --    BEACE
+      pure $ provedExpr : (conjuncts provedExpr ++ cxt)
 
 rename :: VarMap -> Expr -> Result Expr
 rename varMap expr = case traverse (`Map.lookup` varMap) expr of
