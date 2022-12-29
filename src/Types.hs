@@ -141,4 +141,4 @@ instance Show ProofBlock where
   show = \case
     Infer expr _      -> "infer " ++ show expr
     Reductio _ expr _ -> "reductio " ++ show expr
-    Cases expr _      -> "case " ++ show expr
+    Cases expr _      -> "cases " ++ show expr
