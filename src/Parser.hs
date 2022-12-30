@@ -95,7 +95,7 @@ exprHR = conjunction <?> "expression"
     conjunction = sepBy1 disjunction (lex "/\\") >>= liftOne AN
     disjunction = sepBy1 simpleExpr (lex "\\/") >>= liftOne OR
     simpleExpr  = negation <|> brackets <|> functor
-    negation = NO <$> (lex "~" *> exprHR)
+    negation = NO <$> (lex "~" *> brackets)
     brackets = lex "(" *> exprHR <* lex ")"
     functor = lex (count 2 letterChar) >>= readFnArgs (lex letterChar)
 
