@@ -116,13 +116,23 @@ data Prop = Prop
     -- ^ conjunction of expressions (can be empty, e.g. `EQ A A`)
   , existentialVars :: [Char]
   , consequent :: Expr
+  , isEquality :: Bool
   }
   deriving Eq
+
+rev :: Prop -> Prop
+rev p@(Prop{..}) = p
+  { antecedent = conjuncts consequent
+  , consequent = case antecedent of
+      [ex] -> ex
+      exs -> AN exs
+  }
+
 
 instance Show Prop where
   show Prop{..} = unwords
     [ show antecedent
-    , "==>"
+    , if isEquality then "<==>" else "==>"
     , if null existentialVars then "" else "∃" ++ existentialVars ++ "."
     , show consequent
     ]

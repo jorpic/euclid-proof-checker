@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module ProofChecker
   ( Facts
+  , ProofCheckerErr(..)
   , checkProof
   , rewriteAs
   , mergeVars
@@ -24,7 +25,7 @@ type Facts = Map PropName Prop
 type VarMap = Map Char Char
 
 data ProofCheckerErr = StringErr { errs ::  [String] }
-  deriving Exception
+  deriving (Eq, Exception)
 
 instance Show ProofCheckerErr where
   show = unlines . zipWith indent [0..] . errs
@@ -131,6 +132,7 @@ inferConjWithProp provedExprs prop expr = do
     -- try to match the whole consequent with expr
     [] -> inferWithProp provedExprs prop expr
 
+
 inferWithProp :: Context -> Prop -> Expr -> Result Expr
 inferWithProp provedExprs Prop{..} expr = do
   -- Variable mapping that unifies 'consequent' with the expression to be
@@ -159,7 +161,7 @@ inferWithProp provedExprs Prop{..} expr = do
   if any (`Set.member` knownObjects) newObjects
     then throwStr $ "Some of the new objects clash with known ones: "
       ++ show newObjects
-    else rename extendedVarMap consequent
+    else rename extendedVarMap consequent -- FIXME: expr?
 
 
 -- Iterate over proof blocks checking each with the context containing

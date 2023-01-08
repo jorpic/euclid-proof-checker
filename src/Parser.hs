@@ -142,13 +142,14 @@ exVars = lex "?" *> some (lex letterChar) <* lex "." <?> "existential"
 prop :: Parser Prop
 prop = exprHR >>= \ex1 ->
   choice
-    [ -- ex1 is an antecedent and we unfold it to form context
-      (lex $ "==>" <|>  "<=>")
-      >> Prop (unfoldAnd ex1)
+    [ do -- ex1 is an antecedent and we unfold it to form context
+      isEquality <- lex $ ("==>" >> pure False)  <|>  ("<=>" >> pure True)
+      Prop (unfoldAnd ex1)
         <$> (fromMaybe [] <$> optional exVars)
         <*> exprHR
+        <*> pure isEquality
       -- ex1 is a consequent without context
-    , pure $ Prop [] [] ex1
+    , pure $ Prop [] [] ex1 False
     ]
   where
     unfoldAnd = \case

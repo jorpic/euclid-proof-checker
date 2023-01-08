@@ -56,14 +56,14 @@ spec = do
       "lemma\txxx\t`EQ A B ==> ?X. EQ B X`\t"
         `parsesTo`
           ( "lemma:xxx"
-          , Prop [Fun EQ "AB"] "X" (Fun EQ "BX")
+          , Prop [Fun EQ "AB"] "X" (Fun EQ "BX") False
           , Nothing
           )
     it "parses a proposition without context" $
       "lemma\txxx\t`EQ a a`\t"
         `parsesTo`
           ( "lemma:xxx"
-          , Prop [] "" (Fun EQ "aa")
+          , Prop [] "" (Fun EQ "aa") False
           , Nothing
           )
     it "parses complex proposition" $
@@ -74,6 +74,7 @@ spec = do
             [Fun PG "ABCD", Fun BE "AED"]
             "X"
             (AN [Fun BE "BXD", Fun BE "CXE"])
+            False
           , Just "file.prf"
           )
 
@@ -83,7 +84,7 @@ spec = do
       "unequal\t`NE A B <=> ~(EQ A B)`"
         `parsesTo`
           ("defn:unequal"
-          , Prop [Fun NE "AB"] "" (NO (Fun EQ "AB"))
+          , Prop [Fun NE "AB"] "" (NO (Fun EQ "AB")) True
           , Nothing
           )
 
