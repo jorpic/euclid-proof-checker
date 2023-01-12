@@ -17,7 +17,7 @@ import Data.Maybe (catMaybes)
 import Data.Set qualified as Set
 
 import Types
-import Utils (mapLeft)
+import Utils (mapLeft, catchEither)
 
 
 type Context = [Expr]
@@ -71,6 +71,10 @@ checkBlock facts cxt blk
       Nothing -> throwStr "can't find the referenced statement"
       Just prop -> withErrContext ("with prop " ++ show prop)
         $ inferConjWithProp cxt prop expr
+          `catchEither` (\e ->
+            if isEquality prop
+              then inferConjWithProp cxt (rev prop) expr
+              else Left e)
 
     Reductio assumption conclusion proof -> do
       when (assumption /= negated conclusion)
@@ -183,10 +187,14 @@ rename varMap expr = case traverse (`Map.lookup` varMap) expr of
   Just expr' -> pure expr'
   Nothing -> throwStr "Impossible! Failed to apply varMap."
 
--- If ex is a conjunction, we explode it and try to prove each conjunct
--- separately.
+-- Here we mean "can be proved without referring to any axioms or facts".
 canBeProvedFrom :: Expr -> Context -> Bool
-canBeProvedFrom ex cxt = all (`elem` cxt) $ conjuncts ex
+canBeProvedFrom ex cxt = case ex of
+  AN exs -> all (`canBeProvedFrom` cxt) exs
+  OR exs -> any (`canBeProvedFrom` cxt) exs || ex `elem` cxt
+  -- Geometrical functors and negation can be proved only by
+  -- having them in the context.
+  _ -> ex `elem` cxt
 
 -- Contains both some expression and its negation.
 notConsistent :: Context -> Bool

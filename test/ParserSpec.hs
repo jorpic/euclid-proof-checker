@@ -88,6 +88,17 @@ spec = do
           , Nothing
           )
 
+  describe "definition with OR" $ do
+    let parsesTo a b = parse propWithInfo "" a `shouldParse` b
+    it "parses simple definition" $
+      "xxx\t`CO A B C <=> (EQ A B \\/ EQ B C)`"
+        `parsesTo`
+          ("defn:xxx"
+          , Prop [Fun CO "ABC"] "" (OR [Fun EQ "AB", Fun EQ "BC"]) True
+          , Nothing
+          )
+
+
   describe "proof" $ do
     let parsesTo a b = parse proofBlock "" a `shouldParse` b
     it "parses inferred expression" $

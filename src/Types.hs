@@ -89,7 +89,7 @@ data Expr' var
 instance Show (Expr' Char) where
   show = \case
     AN ex -> "AN" ++ show ex
-    OR ex -> "AN" ++ show ex
+    OR ex -> "OR" ++ show ex
     NO ex -> "NO" ++ show ex
     Fun fn vars -> show fn ++ vars
 
@@ -107,7 +107,7 @@ negated = \case
 
 conjuncts :: Expr -> [Expr]
 conjuncts = \case
-  AN ex -> ex
+  AN ex -> concatMap conjuncts ex
   ex -> [ex]
 
 -- Proposition is either implication or equivalence.
