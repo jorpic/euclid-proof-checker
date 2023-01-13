@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
-
 import Test.Hspec
 import ParserSpec qualified
 import ProofCheckerSpec qualified

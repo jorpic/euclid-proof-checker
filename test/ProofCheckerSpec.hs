@@ -4,8 +4,8 @@ import Prelude hiding (Ordering(..))
 import Data.Map.Strict qualified as Map
 import Test.Hspec
 
-import Types
 import ProofChecker
+import TestUtils () -- for instance IsString Expr
 
 spec :: Spec
 spec = do
@@ -25,18 +25,15 @@ spec = do
 
   describe "rewriteAs" $ do
     it "fails when functors does not match"
-      $ rewriteAs
-        (Fun EQ "AB") (Fun NE "AB")
+      $ rewriteAs "EQAB" "NEAB"
       `shouldBe`
         Left (StringErr ["can't match EQAB with NEAB"])
     it "fails when variables clash"
-      $ rewriteAs
-        (Fun EQ "AA") (Fun EQ "AB")
+      $ rewriteAs "EQAA" "EQAB"
       `shouldBe`
         Left (StringErr ["conflicting mappings: ('A',('B','A'))"])
     it "ok when no conflict "
-      $ rewriteAs
-        (Fun EQ "AB") (Fun EQ "BA")
+      $ rewriteAs "EQAB" "EQBA"
       `shouldBe`
         Right (Map.fromList [('A','B'), ('B','A')])
 
