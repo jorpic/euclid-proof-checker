@@ -74,17 +74,15 @@ arity = \case
 -- Expression mixes logical functors like NO, AN, OR, and geometrical
 -- relations (all other functors).
 type Expr = Expr' Char
--- FIXME: Expression syntax used in the paper does not allow nested AND
--- expressions:
---  ANEQab+EQcd+OREQxy|ANEQyz+EQxz
---    => a=b & c=d & (x=y | y=z) & x=z
--- maybe we can use this to simplify the parser?
+
+-- `Expr'` exists only to infer Foldable which is used to collect
+-- all objects from expression (e.g. in `knownObjects`).
 data Expr' var
   = AN [Expr' var] -- FIXME: use NonEmpty lists here and below?
   | OR [Expr' var]
   | NO (Expr' var)
   | Fun Fn [var]
-  deriving (Eq, Ord, Foldable, Functor, Traversable)
+  deriving (Eq, Ord, Foldable)
 
 instance Show (Expr' Char) where
   show = \case
@@ -110,6 +108,11 @@ conjuncts = \case
   AN ex -> concatMap conjuncts ex
   ex -> [ex]
 
+disjuncts :: Expr -> [Expr]
+disjuncts = \case
+  OR ex -> concatMap disjuncts ex
+  ex -> [ex]
+
 -- Proposition is either implication or equivalence.
 data Prop = Prop
   { antecedent :: [Expr]
@@ -120,9 +123,11 @@ data Prop = Prop
   }
   deriving Eq
 
+-- Swap lhs & rhs in equvalence
 rev :: Prop -> Prop
 rev p@(Prop{..}) = p
   { antecedent = conjuncts consequent
+  , existentialVars = "" -- original vars are no more existential
   , consequent = case antecedent of
       [ex] -> ex
       exs -> AN exs

@@ -40,8 +40,6 @@ library
       RecordWildCards
       DeriveAnyClass
       DeriveFoldable
-      DeriveFunctor
-      DeriveTraversable
       FlexibleInstances
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
@@ -64,8 +62,6 @@ executable euclid-proof-checker
       RecordWildCards
       DeriveAnyClass
       DeriveFoldable
-      DeriveFunctor
-      DeriveTraversable
       FlexibleInstances
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
@@ -82,6 +78,7 @@ test-suite euclid-proof-checker-test
   other-modules:
       ParserSpec
       ProofCheckerSpec
+      TestUtils
       Paths_euclid_proof_checker
   hs-source-dirs:
       test
@@ -92,8 +89,6 @@ test-suite euclid-proof-checker-test
       RecordWildCards
       DeriveAnyClass
       DeriveFoldable
-      DeriveFunctor
-      DeriveTraversable
       FlexibleInstances
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:

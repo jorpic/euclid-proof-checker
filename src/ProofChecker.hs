@@ -1,171 +1,46 @@
-{-# LANGUAGE TemplateHaskell #-}
 module ProofChecker
   ( Facts
   , ProofCheckerErr(..)
   , checkProof
+  -- vvv-- exported for testing only
+  , inferExact
+  , inferExact'
+  , inferWithEqs
+  , inferWithEqs'
+  , inferWithProp
+  , inferWithProp'
   , rewriteAs
   , mergeVars
   ) where
 
 import Prelude hiding (Ordering(..))
-import Control.Exception
 import Control.Monad (forM_, foldM, zipWithM, (>=>), when)
-import Data.Either (rights)
+import Data.List (nub)
+import Data.Either (rights, isRight)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (catMaybes)
 import Data.Set qualified as Set
 
 import Types
-import Utils (mapLeft, catchEither)
+import Utils
 
 
 type Context = [Expr]
 type Facts = Map PropName Prop
 type VarMap = Map Char Char
 
-data ProofCheckerErr = StringErr { errs ::  [String] }
-  deriving (Eq, Exception)
-
-instance Show ProofCheckerErr where
-  show = unlines . zipWith indent [0..] . errs
-    where
-      indent i = (replicate (i*2) ' ' ++)
-
-type Result a = Either ProofCheckerErr a
-
-throwStr :: String -> Result a
-throwStr = Left . StringErr . (:[])
-
-withErrContext :: String -> Result a -> Result a
-withErrContext cxt = mapLeft $ StringErr . (cxt:) . errs
 
 -- | Check a proof of a proposition.
 -- The proof can reference some of already proved facts.
 -- Returns error if proof is not valid.
 checkProof :: Facts -> Prop -> Proof -> Result ()
 checkProof facts p@(Prop{..}) proof
-  = withErrContext ("when proving " ++ show p) $ do
+  = withErrContext ("proving prop " ++ show p) $ do
     -- Initial context contains expressions from the antecedent.
     provedExprs <- checkAllBlocks facts antecedent proof
     when (not $ consequent `canBeProvedFrom` provedExprs)
-      $ throwStr "Can't prove consequent"
-
-
-checkBlock :: Facts -> Context -> ProofBlock -> Result Expr
-checkBlock facts cxt blk
-  = withErrContext (show blk)
-  $ case blk of
-    -- Search the exact expr in the context.
-    Infer expr ""
-      | expr `canBeProvedFrom` cxt -> pure expr
-      | otherwise -> throwStr "can't infer expression from the context"
-
-    -- This is a meta-axiom. It searches EQs in context and tries to
-    -- apply substitution.
-    Infer expr "cn:equalitysub" -> inferEqSubstitution cxt expr
-
-    -- Search the referenced proposition among facts and try to satisfy it from
-    -- the context.
-    Infer expr ref -> case Map.lookup ref facts of
-      Nothing -> throwStr "can't find the referenced statement"
-      Just prop -> withErrContext ("with prop " ++ show prop)
-        $ inferConjWithProp cxt prop expr
-          `catchEither` (\e ->
-            if isEquality prop
-              then inferConjWithProp cxt (rev prop) expr
-              else Left e)
-
-    Reductio assumption conclusion proof -> do
-      when (assumption /= negated conclusion)
-        $ throwStr "Assumption must be a negation of the conclusion"
-
-      let startCxt = assumption : cxt
-      cxt' <- checkAllBlocks facts startCxt proof
-      if notConsistent cxt'
-        then pure conclusion
-        else throwStr "No contradiction found"
-
-    -- Disjunction of cases must be true in the context. There are two
-    -- options: it can be inferred or it is exhaustive i.e. (A or not A).
-    Cases expr casesAndProofs -> do
-      let cases = map fst casesAndProofs
-      when (not $ OR cases `canBeProvedFrom` cxt || isExhaustive cases)
-        $ throwStr "Cases are not exhaustive and cannot be inferred"
-
-      forM_ casesAndProofs $ \(cse, proof) ->
-        withErrContext ("case " ++ show cse) $ do
-          cxt' <- checkAllBlocks facts (cse : cxt) proof
-          when (not $ expr `canBeProvedFrom` cxt')
-            $ throwStr $ "can't infer " ++ show expr
-      pure expr
-
-
-inferEqSubstitution :: Context -> Expr -> Result Expr
-inferEqSubstitution cxt expr = do
-      let equalities = concatMap
-            (\case { Fun EQ [a,b] -> [(a,b), (b,a)] ; _ -> [] })
-            cxt
-      -- maps only equals to equals
-      let isEqMap
-            = all (`elem` equalities)
-            . Map.toList . Map.filterWithKey (/=)
-      let rewrites
-            = filter isEqMap $ rights
-            -- FIXME: explain this ----vvvvvv
-            $ map (`rewriteAs` expr) cxt ++ map (expr `rewriteAs`) cxt
-      when (null rewrites)
-        $ withErrContext ("equalities found " ++ show equalities)
-          $ withErrContext ("provedExprs " ++ show cxt)
-          $ throwStr "Can't find how to rewrite with equalities"
-      pure expr
-
-
-inferConjWithProp :: Context -> Prop -> Expr -> Result Expr
-inferConjWithProp provedExprs prop expr = do
-  -- If prop's consequent is a conjunction we should try
-  -- to match expr with each conjunct.
-  let matches =
-        [ inferWithProp provedExprs p expr
-        | e <- conjuncts $ consequent prop
-        , let p = prop {consequent = e}
-        ]
-  case rights matches of
-    ex : _ -> pure ex
-    -- FIXME: redundancy here
-    -- try to match the whole consequent with expr
-    [] -> inferWithProp provedExprs prop expr
-
-
-inferWithProp :: Context -> Prop -> Expr -> Result Expr
-inferWithProp provedExprs Prop{..} expr = do
-  -- Variable mapping that unifies 'consequent' with the expression to be
-  -- proved.
-  varMap <- consequent `rewriteAs` expr
-
-  -- For each expression in 'antecedent', find an expression in the context
-  -- such that both can be unified by a variable mapping.
-  -- All those mappings must be compatible with each other and with 'varMap'.
-  let possibleMappings = foldM (searchEx provedExprs) varMap antecedent
-  -- ^ List monad is used to search repeatedly and backtrack in case of conflict.
-  extendedVarMap <- case possibleMappings of
-    vm : _ -> pure vm
-    [] -> withErrContext ("base map " ++ show varMap)
-      $ throwStr $ "can't prove prop from context " ++ show provedExprs
-
-  -- New objects may be introduced by the proposition.
-  -- Rename them according to 'extendedVarMap'.
-  let newObjects = catMaybes $ map (`Map.lookup` extendedVarMap) existentialVars
-  -- ^ 'catMaybes' is fine here because 'Nothing' occurs only if there is
-  -- some variable that is mentioned in 'existentialVars' but not used in
-  -- the antecedent.
-
-  let getExprObjects = foldMap Set.singleton
-  let knownObjects = foldMap getExprObjects provedExprs
-  if any (`Set.member` knownObjects) newObjects
-    then throwStr $ "Some of the new objects clash with known ones: "
-      ++ show newObjects
-    else rename extendedVarMap consequent -- FIXME: expr?
+      $ throwStr "Can't prove consequent from the context"
 
 
 -- Iterate over proof blocks checking each with the context containing
@@ -174,7 +49,8 @@ checkAllBlocks :: Facts -> Context -> [ProofBlock] -> Result Context
 checkAllBlocks facts startCxt blocks = do
     let foldProofBlocks cxt chkBlk = foldM chkBlk cxt blocks
     foldProofBlocks startCxt $ \cxt block -> do
-      provedExpr <- checkBlock facts cxt block
+      provedExpr <- withErrContext ("checking block " ++ show block)
+        $ checkBlock facts cxt block
       -- If provedExpr is a conjunction we add all its conjuncts
       -- separately. E.g. proving BEACE in 3.7.a.prf:
       --    ANBEACE+EECECD  postulate:extension
@@ -182,39 +58,160 @@ checkAllBlocks facts startCxt blocks = do
       pure $ conjuncts provedExpr ++ cxt
 
 
-rename :: VarMap -> Expr -> Result Expr
-rename varMap expr = case traverse (`Map.lookup` varMap) expr of
-  Just expr' -> pure expr'
-  Nothing -> throwStr "Impossible! Failed to apply varMap."
+checkBlock :: Facts -> Context -> ProofBlock -> Result Expr
+checkBlock facts cxt = \case
+  -- Search the exact expr in the context.
+  Infer expr "" -> inferExact' cxt expr >> pure expr
+
+  -- This is a meta-axiom. It searches EQs in the context and applies them
+  -- to the expr.
+  Infer expr "cn:equalitysub" -> inferWithEqs' cxt expr >> pure expr
+
+  -- Search the referenced proposition among facts and try to satisfy it from
+  -- the context.
+  Infer expr ref -> case Map.lookup ref facts of
+    Nothing -> throwStr "can't find the referenced statement"
+    Just prop -> withErrContext ("with prop " ++ show prop)
+      $ inferWithProp' cxt prop expr >> pure expr
+
+  Reductio assumption conclusion proof -> do
+    when (assumption /= negated conclusion)
+      $ throwStr "Assumption must be a negation of the conclusion"
+
+    let startCxt = assumption : cxt
+    cxt' <- checkAllBlocks facts startCxt proof
+    if notConsistent cxt'
+      then pure conclusion
+      else throwStr "No contradiction found"
+
+  -- Disjunction of cases must be true in the context. There are two
+  -- options: it can be inferred or it is exhaustive i.e. `A or not A`.
+  Cases expr casesAndProofs -> do
+    let cases = map fst casesAndProofs
+    when (not $ OR cases `canBeProvedFrom` cxt || isExhaustive cases)
+      $ throwStr "Cases are not exhaustive and cannot be inferred"
+
+    forM_ casesAndProofs $ \(cse, proof) ->
+      withErrContext ("case " ++ show cse) $ do
+        cxt' <- checkAllBlocks facts (cse : cxt) proof
+        when (not $ expr `canBeProvedFrom` cxt')
+          $ throwStr $ "can't infer " ++ show expr
+    pure expr
+
+
+-- We have two versions of each `infer*` function:
+--  - the one without a tick holds inference logic;
+--  - the one with a tick handles cases with complex AND/OR expressions and
+--  eventually calls the tickless version one or more times.
+
+inferExact' :: Context -> Expr -> Result ()
+inferExact' cxt expr = inferExact cxt expr
+  `orElse` (\err -> case expr of
+    AN exs -> allE $ map (inferExact' cxt) exs
+    OR exs -> anyE $ map (inferExact' cxt) exs
+    _ -> Left err)
+
+inferExact :: Context -> Expr -> Result ()
+inferExact cxt ex = when (not $ ex `elem` cxt)
+  $ throwStr "can't infer expression from the context"
+
+inferWithEqs' :: Context -> Expr -> Result ()
+inferWithEqs' cxt expr = inferWithEqs cxt expr
+  `orElse` (\err -> case expr of
+    AN exs -> allE $ map (inferWithEqs' cxt) exs
+    OR exs -> anyE $ map (inferWithEqs' cxt) exs
+    _ -> Left err)
+
+inferWithEqs :: Context -> Expr -> Result ()
+inferWithEqs cxt expr = do
+  let equalities = concatMap
+        (\case { Fun EQ [a,b] -> [(a,b), (b,a)] ; _ -> [] })
+        cxt
+
+  let isEqMap -- maps only equals to equals
+        = all (`elem` equalities)
+        . Map.toList . Map.filterWithKey (/=)
+
+  let rewrites
+        = filter isEqMap $ rights
+        -- FIXME: explain this ----vvvvvv
+        $ map (`rewriteAs` expr) cxt ++ map (expr `rewriteAs`) cxt
+
+  when (null rewrites)
+    $ withErrContext ("equalities found " ++ show equalities)
+      $ withErrContext ("provedExprs " ++ show cxt)
+      $ throwStr "Can't find how to rewrite with equalities"
+
+
+inferWithProp' :: Context -> Prop -> Expr -> Result ()
+inferWithProp' cxt prop expr
+  = infer prop
+    `orElse` (\case
+      _ | isEquality prop -> withErrContext ("rev prop") $ infer (rev prop)
+      err -> Left err)
+  where
+    -- Get variables used in the context.
+    knownVars = let getVars = foldMap Set.singleton in foldMap getVars cxt
+    conflict var = var `Set.member` knownVars
+
+    infer (Prop{..}) = do
+      let baseMaps = consequent `rewriteWithSubexprs` expr
+      when (null baseMaps)
+        $ throwStr "can't match consequent with expr"
+
+      -- Applying a proposition may introduce new variables into the scope.
+      -- We need to ensure that they are not in conflict with already existing
+      -- variables. E.g.:
+      --   - with context [NExz, EQyz]
+      --   - applying prop `NEac => ∃b . BEabc` to `BExyz`
+      --   - will map `abc => xyz` but `y` is already used in the context.
+      let newVars vm = catMaybes $ map (`Map.lookup` vm) existentialVars
+
+      -- Filter out mappings that in conflict with `knownVars`.
+      let baseMaps' = filter (not . any conflict . newVars) baseMaps
+      when (null baseMaps')
+        $ throwStr "conflict with existential vars"
+
+      let searchEx' vm ex
+            = rights $ do
+              e <- cxt
+              vm' <- ex `rewriteWithSubexprs'` e
+              pure $ mergeVars vm vm'
+
+            -- $ concatMap (map (mergeVars vm) . (ex `rewriteWithSubexprs'`)) cxt
+
+      let extMaps = baseMaps' >>= \vm -> foldM searchEx' vm antecedent
+      when (null extMaps)
+        $ withErrContext ("context " ++ show cxt)
+        $ throwStr "can't prove antecendent from the context"
+
+    rewriteWithSubexprs ax bx = rights
+      [ a `rewriteAs` b
+      | a <- nub $ ax : conjuncts ax
+      , b <- nub $ bx : disjuncts bx
+      ]
+
+    rewriteWithSubexprs' ax bx = rights
+      [ a `rewriteAs` b
+      | a <- nub $ ax : disjuncts ax
+      , b <- nub $ bx : conjuncts bx
+      ]
+
 
 -- Here we mean "can be proved without referring to any axioms or facts".
 canBeProvedFrom :: Expr -> Context -> Bool
-canBeProvedFrom ex cxt = case ex of
-  AN exs -> all (`canBeProvedFrom` cxt) exs
-  OR exs -> any (`canBeProvedFrom` cxt) exs || ex `elem` cxt
-  -- Geometrical functors and negation can be proved only by
-  -- having them in the context.
-  _ -> ex `elem` cxt
+canBeProvedFrom expr cxt = isRight $ inferExact' cxt expr
+
 
 -- Contains both some expression and its negation.
 notConsistent :: Context -> Bool
 notConsistent exprs = maximum [negated e `elem` exprs | e <- exprs]
 
+
 -- This is oversimplification but will do for our purposes.
 isExhaustive :: [Expr] -> Bool
 isExhaustive [a,b] = a == negated b
 isExhaustive _ = False
-
--- In the provided context search all expressions that can be matched to `ex` without
--- a conflict with the var map `vm`.
-searchEx :: Context -> VarMap -> Expr -> [VarMap]
-searchEx cxt vm ex
-  = rights
-  $ map ((ex `rewriteAs`) >=> mergeVars vm) cxt
-
-
--- findMatching :: [Expr] -> Expr -> [(Expr, VarMap)]
--- dropConflictingTo :: VarMap -> [(Expr, VarMap)] -> [(Expr, VarMap)]
 
 
 -- Get a varables to variables mapping that converts from ex1 to ex2.

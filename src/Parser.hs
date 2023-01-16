@@ -69,13 +69,13 @@ proofBlock = space >> choice
       ex' <- lex exprCC <* ln
       when (ex' /= ex)
         $ fail "invalid case expression"
-      proof <- (proofBlock <* ln) `manyTill` (kw "qedcase")
-      return (ex, proof)
+      prf <- (proofBlock <* ln) `manyTill` (kw "qedcase")
+      return (ex, prf)
 
     proofByContradiction ex = do
-      (proof, conclusion) <-
+      (prf, conclusion) <-
         (proofBlock <* ln) `manyTill_` (try $ lex exprCC <* kw "reductio")
-      return $ Reductio ex conclusion proof
+      return $ Reductio ex conclusion prf
 
 -- FIXME: expalin that we have two syntaxes for expressions
 --  - concise one like this: ANEABAFFAC+IABACF

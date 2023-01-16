@@ -29,8 +29,6 @@ default-extensions:
   - RecordWildCards
   - DeriveAnyClass
   - DeriveFoldable
-  - DeriveFunctor
-  - DeriveTraversable
   - FlexibleInstances
 
 ghc-options:
