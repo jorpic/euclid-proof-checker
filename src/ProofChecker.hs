@@ -7,14 +7,13 @@ module ProofChecker
   , inferExact'
   , inferWithEqs
   , inferWithEqs'
-  , inferWithProp
   , inferWithProp'
   , rewriteAs
   , mergeVars
   ) where
 
 import Prelude hiding (Ordering(..))
-import Control.Monad (forM_, foldM, zipWithM, (>=>), when)
+import Control.Monad (forM_, foldM, zipWithM, when)
 import Data.List (nub)
 import Data.Either (rights, isRight)
 import Data.Map.Strict (Map)
@@ -134,7 +133,14 @@ inferWithEqs cxt expr = do
 
   let rewrites
         = filter isEqMap $ rights
-        -- FIXME: explain this ----vvvvvv
+        -- We need to try to rewrite in both directions. Here is an example:
+        -- 1) inferWithEqs [EQAB, COABC] COAAC
+        -- 2) inferWithEqs [EQAB, COAAC] COABC
+        -- In both cases COABC and COAAC are equivalent due to EQAB but
+        -- `rewriteAs` is unaware of that equality, so this fails:
+        --    COAAC `rewriteAs` COABC = [A->A, A->B] = FAIL
+        -- but the reverese succeeds:
+        --    COABC `rewriteAs` COAAC = [A->A, B->A]
         $ map (`rewriteAs` expr) cxt ++ map (expr `rewriteAs`) cxt
 
   when (null rewrites)
@@ -150,11 +156,30 @@ inferWithProp' cxt prop expr
       _ | isEquality prop -> withErrContext ("rev prop") $ infer (rev prop)
       err -> Left err)
   where
-    -- Get variables used in the context.
+    -- Collect all variables used in the context.
     knownVars = let getVars = foldMap Set.singleton in foldMap getVars cxt
     conflict var = var `Set.member` knownVars
 
     infer (Prop{..}) = do
+      -- Proposition is like an expression template in a sense that exact
+      -- variable names are not important.
+      --
+      -- So for the first step we try to match proposition's consequent with
+      -- the expression we want to prove. "To match" means to find a variable
+      -- mapping that substitutes proposition's "template variables" with the
+      -- names of real objects that are used in the context and the expression
+      -- to prove.
+      --
+      -- A bit of complication adds that we have several options to prove an
+      -- expression:
+      --    - Exact match: consequent(varMap) = exp.
+      --    - Consequent is of the form AND[ex1, ex2, ...]. This means that all
+      --    of ex1, ex2, ... are true (proved) if we can prove proposition's
+      --    antecendent. So we try to match exp with all AND subexpressions.
+      --    - exp is of the form OR[ex1 ex2, ...]. In that case it is enough to
+      --    prove any of the ex1, ... to prove exp.
+      -- It is the same what we do in "ticked" inference functions `inferExact'`
+      -- and `inferWithEqs'`. See tests for some exapmles.
       let baseMaps = consequent `rewriteWithSubexprs` expr
       when (null baseMaps)
         $ throwStr "can't match consequent with expr"
@@ -164,7 +189,8 @@ inferWithProp' cxt prop expr
       -- variables. E.g.:
       --   - with context [NExz, EQyz]
       --   - applying prop `NEac => ∃b . BEabc` to `BExyz`
-      --   - will map `abc => xyz` but `y` is already used in the context.
+      --   - will map `abc => xyz` where `y` must be a fresh variable but it
+      --   is not as it is already used in the context.
       let newVars vm = catMaybes $ map (`Map.lookup` vm) existentialVars
 
       -- Filter out mappings that in conflict with `knownVars`.
@@ -172,58 +198,63 @@ inferWithProp' cxt prop expr
       when (null baseMaps')
         $ throwStr "conflict with existential vars"
 
-      let searchEx' vm ex
-            = rights $ do
-              e <- cxt
-              vm' <- ex `rewriteWithSubexprs'` e
-              pure $ mergeVars vm vm'
+      -- Now we are using the context to prove all conjuncts of the antecendent.
+      -- Note the usage of ticked `rewriteWithSubexprs'`.
+      let inferWithVarMap vm ex = rights
+            [ mergeVars vm vm'
+            | e <- cxt
+            , vm' <- ex `rewriteWithSubexprs'` e
+            ]
 
-            -- $ concatMap (map (mergeVars vm) . (ex `rewriteWithSubexprs'`)) cxt
+      let extMaps = do
+            vm <- baseMaps'
+            foldM inferWithVarMap vm antecedent
 
-      let extMaps = baseMaps' >>= \vm -> foldM searchEx' vm antecedent
       when (null extMaps)
         $ withErrContext ("context " ++ show cxt)
         $ throwStr "can't prove antecendent from the context"
 
-    rewriteWithSubexprs ax bx = rights
-      [ a `rewriteAs` b
-      | a <- nub $ ax : conjuncts ax
-      , b <- nub $ bx : disjuncts bx
-      ]
 
-    rewriteWithSubexprs' ax bx = rights
-      [ a `rewriteAs` b
-      | a <- nub $ ax : disjuncts ax
-      , b <- nub $ bx : conjuncts bx
-      ]
+rewriteWithSubexprs :: Expr -> Expr -> [VarMap]
+rewriteWithSubexprs ax bx = rights
+  [ a `rewriteAs` b
+  | a <- nub $ ax : conjuncts ax
+  , b <- nub $ bx : disjuncts bx
+  ]
+
+rewriteWithSubexprs' :: Expr -> Expr -> [VarMap]
+rewriteWithSubexprs' ax bx = rights
+  [ a `rewriteAs` b
+  | a <- nub $ ax : disjuncts ax
+  , b <- nub $ bx : conjuncts bx
+  ]
 
 
 -- Here we mean "can be proved without referring to any axioms or facts".
 canBeProvedFrom :: Expr -> Context -> Bool
 canBeProvedFrom expr cxt = isRight $ inferExact' cxt expr
 
+contradicts :: Expr -> [Expr] -> Bool
+contradicts ex exs = negated ex `canBeProvedFrom` exs
 
 -- Contains both some expression and its negation.
 notConsistent :: Context -> Bool
-notConsistent exprs = maximum [negated e `elem` exprs | e <- exprs]
+notConsistent exs = any (`contradicts` exs) exs
 
-
--- This is oversimplification but will do for our purposes.
 isExhaustive :: [Expr] -> Bool
-isExhaustive [a,b] = a == negated b
-isExhaustive _ = False
+isExhaustive exs = all (`contradicts` exs) exs
 
 
--- Get a varables to variables mapping that converts from ex1 to ex2.
---  `ex1[varMap] = ex2`.
+-- Given two expressions ex1 and ex2, this functions computes a variables to
+-- variables mapping that translates ex1 to ex2.
+-- Example:
+--    - COABC `rewriteAs` COCBA = [A->C, B->B, C->A]
 -- Fails if it is not possible to convert ex1 to ex2 due to:
---  - mismatching functors: EQAB -> NECD
---  - conflicting variables: EQAA -> EQAB
---  NB!: Result of `matchEx` is a mapping which is not always injective.
---    E.g. in `matchEx COABC COXYX  => {A: X, B: Y, C: X}`
---    both A and C map to X.
---    Switching arguments would result in variable conflict (non-deterministic
---    mapping).
+--    - mismatching functors: EQAB -> NECD
+--    - conflicting variables: EQAA -> EQAB (maps A simultaneously to A and B)
+--  NB!: Result of `rewriteAs` is a mapping which is not always injective.
+--  E.g.
+--    - COABC `rewriteAs` COXYX  = [A->X, B->Y, C->X] (both A and C map to X).
 rewriteAs :: Expr -> Expr -> Result VarMap
 rewriteAs ex1 ex2 = case (ex1, ex2) of
   (AN xs, AN ys) | length xs == length ys -> rewriteMany xs ys
@@ -238,8 +269,7 @@ rewriteAs ex1 ex2 = case (ex1, ex2) of
     rewriteMany xs ys = zipWithM rewriteAs xs ys >>= mergeMany
 
 
--- Merges list of mappings.
--- Fails if there are conflicts in mappings
+-- Merges multiple mappings into one or fails if there is a conflict
 -- (e.g. [a->b] in one mapping and [a->c] in another).
 mergeVars :: VarMap -> VarMap -> Result VarMap
 mergeVars vm = foldM f vm . Map.toList
