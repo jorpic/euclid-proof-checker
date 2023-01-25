@@ -48,13 +48,25 @@ checkAllBlocks :: Facts -> Context -> [ProofBlock] -> Result Context
 checkAllBlocks facts startCxt blocks = do
     let foldProofBlocks cxt chkBlk = foldM chkBlk cxt blocks
     foldProofBlocks startCxt $ \cxt block -> do
+      -- "Normalize" expressions before adding to the context:
+      --  - split AN into conjuncts
+      --  - filter useless disjuncts from OR (repeat this until fixpoint).
+      let orLoop cx = do
+            let filterOR = \case
+                  OR exs ->  case filter (not . (`contradicts` cx)) exs of
+                    [x] -> [x]
+                    xs  -> [OR xs]
+                  NO (OR exs) -> map negated exs
+                  ex -> conjuncts ex
+            let cx' = concatMap filterOR cx
+            if cx == cx' then pure cx' else orLoop cx'
+
+      cxt' <- orLoop cxt
+
+      -- check a block in the normalized context
       provedExpr <- withErrContext ("checking block " ++ show block)
-        $ checkBlock facts cxt block
-      -- If provedExpr is a conjunction we add all its conjuncts
-      -- separately. E.g. proving BEACE in 3.7.a.prf:
-      --    ANBEACE+EECECD  postulate:extension
-      --    BEACE
-      pure $ conjuncts provedExpr ++ cxt
+        $ checkBlock facts cxt' block
+      pure $ conjuncts provedExpr ++ cxt'
 
 
 checkBlock :: Facts -> Context -> ProofBlock -> Result Expr
@@ -117,10 +129,9 @@ inferExact cxt ex = when (not $ any (`entails` ex) cxt)
   where
     x `entails` y = x == y || case (x, y) of
       (AN xs, _) -> any (`entails` y) xs
-      -- filter out disjuncts that are not consistent with context
-      (OR xs, OR ys)
-        -> Set.fromList (filter (not . (`contradicts` cxt)) xs)
-        == Set.fromList (filter (not . (`contradicts` cxt)) ys)
+      (OR [], _) -> True -- contradictory context
+      -- OR-extension: we can add anything to already proved disjunction.
+      (OR xs, OR ys) -> all (`elem` ys) xs -- xs is a subset of ys
       _ -> False
 
 
