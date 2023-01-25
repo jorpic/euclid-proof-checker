@@ -75,6 +75,7 @@ checkBlock facts cxt = \case
 
   Reductio assumption conclusion proof -> do
     when (assumption /= negated conclusion)
+    -- FIXME: (isExhaustive [assumption, conclusion]
       $ throwStr "Assumption must be a negation of the conclusion"
 
     let startCxt = assumption : cxt
@@ -111,8 +112,18 @@ inferExact' cxt expr = inferExact cxt expr
     _ -> Left err)
 
 inferExact :: Context -> Expr -> Result ()
-inferExact cxt ex = when (not $ ex `elem` cxt)
+inferExact cxt ex = when (not $ any (`entails` ex) cxt)
   $ throwStr "can't infer expression from the context"
+  where
+    x `entails` y = x == y || case (x, y) of
+      (AN xs, _) -> any (`entails` y) xs
+      -- filter out disjuncts that are not consistent with context
+      (OR xs, OR ys)
+        -> Set.fromList (filter (not . (`contradicts` cxt)) xs)
+        == Set.fromList (filter (not . (`contradicts` cxt)) ys)
+      _ -> False
+
+
 
 inferWithEqs' :: Context -> Expr -> Result ()
 inferWithEqs' cxt expr = inferWithEqs cxt expr
